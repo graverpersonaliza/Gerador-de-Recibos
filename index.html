@@ -1,428 +1,916 @@
+
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gerador de Recibos - Standalone</title>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; background: #f9f9f9; }
-    .container { max-width: 1000px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
-    h1 { text-align: center; margin-bottom: 10px; }
-    .nav-tabs { display:flex; gap:8px; margin: 16px 0; }
-    .nav-tab { padding:10px 16px; background:#f3f4f6; border-radius:6px; cursor:pointer; font-weight:600; }
-    .nav-tab.active { background:#fff; border:2px solid #3b82f6; color:#0b63d6; }
-    .form-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(280px,1fr)); gap:16px; }
-    label { display:block; margin-top:8px; font-weight:600; }
-    input, select, textarea { width:100%; padding:8px; margin-top:6px; border-radius:6px; border:1px solid #d1d5db; font-size:14px; }
-    .inline-row { display:flex; gap:8px; }
-    .inline-row input { flex:1; }
-    .full-row { grid-column:1/-1; }
-    .btn { margin-top:16px; padding:10px 16px; border:none; border-radius:6px; background:#3b82f6; color:white; cursor:pointer; font-weight:600; }
-    .btn.secondary { background:#6b7280; }
-    .recibo-box { display:none; margin-top:20px; padding:20px; border:1px solid #000; background:#fff; }
-    .recibo-header { text-align:center; border-bottom:3px solid #374151; padding-bottom:12px; margin-bottom:18px; }
-    .assinatura { margin-top:32px; text-align:center; }
-    .action-buttons { display:flex; gap:8px; margin-top:16px; }
-    @media print { body { background:white; } .container { box-shadow:none; } .action-buttons, .nav-tabs { display:none!important; } }
-  </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gerador de Recibos</title>
+
+<style>
+:root{
+ --bg:#eef3f9;
+ --card:#ffffff;
+ --border:#d9e2ef;
+ --text:#1e293b;
+ --primary:#2563eb;
+}
+
+body.dark{
+ --bg:#0f172a;
+ --card:#1e293b;
+ --border:#334155;
+ --text:#f8fafc;
+}
+
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+ background:var(--bg);
+ color:var(--text);
+ font-family:Arial,sans-serif;
+ padding:20px;
+ transition:.3s;
+}
+
+.container{max-width:1250px;margin:auto}
+
+.topbar{
+ background:var(--card);
+ border:1px solid var(--border);
+ border-radius:18px;
+ padding:20px 24px;
+ display:flex;
+ justify-content:space-between;
+ align-items:center;
+ margin-bottom:20px;
+}
+
+.actions{display:flex;gap:10px;flex-wrap:wrap}
+
+.btn{
+ padding:14px 18px;
+ border:none;
+ border-radius:12px;
+ cursor:pointer;
+ font-weight:bold;
+}
+
+.btn-primary{
+ background:var(--primary);
+ color:white;
+}
+
+.btn-outline{
+ background:transparent;
+ border:1px solid var(--primary);
+ color:var(--primary);
+}
+
+.card{
+ background:var(--card);
+ border:1px solid var(--border);
+ border-radius:18px;
+ padding:24px;
+}
+
+.tabs{
+ display:flex;
+ gap:10px;
+ margin-bottom:20px;
+ flex-wrap:wrap;
+}
+
+.tab{
+ padding:14px 20px;
+ border-radius:12px;
+ border:1px solid var(--border);
+ background:var(--card);
+ cursor:pointer;
+ font-weight:bold;
+}
+
+.tab.active{
+ background:#eff6ff;
+ border:2px solid var(--primary);
+ color:var(--primary);
+}
+
+.tab-content{display:none}
+.tab-content.active{display:block}
+
+.grid{
+ display:grid;
+ grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+ gap:18px;
+}
+
+.full{grid-column:1/-1}
+
+label{
+ display:block;
+ margin-bottom:10px;
+ font-weight:bold;
+}
+
+input,textarea,select{
+ width:100%;
+ padding:15px 16px;
+ border-radius:12px;
+ border:1px solid var(--border);
+ background:var(--card);
+ color:var(--text);
+}
+
+textarea{min-height:120px}
+
+.assinatura{
+ width:100%;
+ max-width:320px;
+ height:120px;
+ border:2px dashed #60a5fa;
+ border-radius:12px;
+ background:white;
+ touch-action:none;
+}
+
+.preview{
+ margin-top:24px;
+ border:1px solid var(--border);
+ border-radius:18px;
+ padding:24px;
+ background:var(--card);
+}
+
+.historico-item{
+ padding:15px 16px;
+ border-bottom:1px solid var(--border);
+}
+
+.pagamento-item{
+ padding:12px;
+ border:1px solid var(--border);
+ border-radius:12px;
+ margin-top:10px;
+}
+
+@media(max-width:768px){
+ .topbar{
+  flex-direction:column;
+  align-items:flex-start;
+  gap:14px;
+ }
+}
+</style>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js">
+
+// formatar data
+function formatarData(data){
+
+ if(!data) return '';
+
+ const [ano,mes,dia] = data.split('-');
+
+ return `${dia}/${mes}/${ano}`;
+
+}
+
+// moeda real
+function aplicarMascaraMoeda(id){
+
+ const campo = document.getElementById(id);
+
+ campo.addEventListener('input', e=>{
+
+   let v = e.target.value.replace(/\D/g,'');
+
+   v = (Number(v)/100).toFixed(2) + '';
+
+   v = v.replace('.',',');
+
+   v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g,'$1.');
+
+   e.target.value = 'R$ ' + v;
+
+ });
+
+}
+
+aplicarMascaraMoeda('valor');
+aplicarMascaraMoeda('valorSimples');
+
+// CEP automático
+document.getElementById('cep').addEventListener('blur', async ()=>{
+
+ const cep = document.getElementById('cep').value.replace(/\D/g,'');
+
+ if(cep.length !== 8) return;
+
+ try{
+
+  const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+
+  const data = await response.json();
+
+  if(!data.erro){
+
+    document.getElementById('logradouro').value = data.logradouro || '';
+document.getElementById('bairro').value = data.bairro || '';
+document.getElementById('cidade').value = data.localidade || '';
+document.getElementById('uf').value = data.uf || '';
+
+  }
+
+ }catch(e){
+  console.log(e);
+ }
+
+});
+
+
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js">
+
+// formatar data
+function formatarData(data){
+
+ if(!data) return '';
+
+ const [ano,mes,dia] = data.split('-');
+
+ return `${dia}/${mes}/${ano}`;
+
+}
+
+// moeda real
+function aplicarMascaraMoeda(id){
+
+ const campo = document.getElementById(id);
+
+ campo.addEventListener('input', e=>{
+
+   let v = e.target.value.replace(/\D/g,'');
+
+   v = (Number(v)/100).toFixed(2) + '';
+
+   v = v.replace('.',',');
+
+   v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g,'$1.');
+
+   e.target.value = 'R$ ' + v;
+
+ });
+
+}
+
+aplicarMascaraMoeda('valor');
+aplicarMascaraMoeda('valorSimples');
+
+// CEP automático
+document.getElementById('cep').addEventListener('blur', async ()=>{
+
+ const cep = document.getElementById('cep').value.replace(/\D/g,'');
+
+ if(cep.length !== 8) return;
+
+ try{
+
+  const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+
+  const data = await response.json();
+
+  if(!data.erro){
+
+    document.getElementById('logradouro').value = data.logradouro || '';
+document.getElementById('bairro').value = data.bairro || '';
+document.getElementById('cidade').value = data.localidade || '';
+document.getElementById('uf').value = data.uf || '';
+
+  }
+
+ }catch(e){
+  console.log(e);
+ }
+
+});
+
+
+</script>
 </head>
+
 <body>
-  <div class="container">
-    <h1>Gerador de Recibos</h1>
 
-    <div class="nav-tabs">
-      <div class="nav-tab active" data-tab="aluguel">🏠 Recibo de Aluguel</div>
-      <div class="nav-tab" data-tab="simples">📄 Recibo Simples</div>
-    </div>
+<div class="container">
 
-    <!-- Aba Aluguel -->
-    <div id="aba-aluguel" class="tab" style="display:block;">
-      <form id="form-aluguel">
-        <div class="form-grid">
-          <div>
-            <label>Locador *</label>
-            <div class="inline-row">
-              <input type="text" id="locador" placeholder="Nome" required />
-              <input type="text" id="cpfLocador" placeholder="CPF/CNPJ" style="max-width:180px;" />
-            </div>
+<div class="topbar">
+<div>
+<h1>🏠 Gerador de Recibos</h1>
+<p>Recibos profissionais de aluguel e pagamentos</p>
+</div>
 
-            <label>Locatário *</label>
-            <div class="inline-row">
-              <input type="text" id="locatario" placeholder="Nome" required />
-              <input type="text" id="cpfLocatario" placeholder="CPF/CNPJ" style="max-width:180px;" />
-            </div>
-          </div>
+<div class="actions">
+<button class="btn btn-outline" id="btnHistorico">🕘 Histórico</button>
+<button class="btn btn-outline" id="btnNovo">📄 Novo Recibo</button>
+<button class="btn btn-primary" id="toggleTheme">🌙 Tema</button>
+</div>
+</div>
 
-          <div>
-            <label>Mês de Referência *</label>
-            <select id="mesReferencia" required>
-              <option value="">Selecione</option>
-              <option>Janeiro</option>
-              <option>Fevereiro</option>
-              <option>Março</option>
-              <option>Abril</option>
-              <option>Maio</option>
-              <option>Junho</option>
-              <option>Julho</option>
-              <option>Agosto</option>
-              <option>Setembro</option>
-              <option>Outubro</option>
-              <option>Novembro</option>
-              <option>Dezembro</option>
-            </select>
+<div class="card">
 
-            <label>Ano *</label>
-            <input type="number" id="ano" value="2025" required />
+<div class="tabs">
+<button class="tab active" data-tab="aluguel">🏠 Recibo de Aluguel</button>
+<button class="tab" data-tab="simples">📄 Recibo Simples</button>
+<button class="tab" data-tab="historico">🕘 Histórico</button>
+</div>
 
-            <label>Tipo de Imóvel</label>
-            <input type="text" id="tipoImovel" placeholder="Ex: Apartamento" />
-          </div>
+<div id="aluguel" class="tab-content active">
 
-          <div class="full-row">
-            <label>Endereço Completo do Imóvel *</label>
-            <div class="inline-row">
-              <input type="text" id="cep" placeholder="CEP" required style="max-width:120px;" />
-              <input type="text" id="endereco" placeholder="Endereço do imóvel" required />
-              <input type="text" id="numero" placeholder="Nº" required style="max-width:90px;" />
-              <input type="text" id="bairro" placeholder="Bairro" required style="max-width:160px;" />
-              <input type="text" id="cidade" placeholder="Cidade" required style="max-width:160px;" />
-              <input type="text" id="uf" placeholder="UF" required style="max-width:80px;" />
-            </div>
-            <label>Complemento</label>
-            <input type="text" id="complemento" />
-          </div>
+<div class="grid">
 
-          <div>
-            <label>Valor (R$) *</label>
-            <input type="number" id="valorAluguel" step="0.01" required />
 
-            <label>Forma de Pagamento *</label>
-            <select id="formaPagamentoAluguel" required>
-              <option>Dinheiro</option>
-              <option>Pix</option>
-              <option>Cheque</option>
-              <option>Transferência/Depósito</option>
-              <option>Cartão</option>
-            </select>
+<div class="full">
+<label>Locador</label>
+<div style="display:grid; grid-template-columns:minmax(420px, 1fr) 240px; align-items:center; width:100%; gap:12px;">
+<input id="locador" placeholder="Nome completo" style="width:100%;">
+<input id="cpfLocador" placeholder="CPF/CNPJ">
+</div>
+</div>
 
-            <label>Data do Pagamento *</label>
-            <input type="date" id="dataPagamentoAluguel" required />
-          </div>
 
-          <div class="full-row">
-            <label>Observações</label>
-            <textarea id="observacaoAluguel" rows="3" placeholder="Observações adicionais..."></textarea>
-          </div>
 
-          <div class="full-row">
-            <label><input type="checkbox" id="duasViasAluguel" /> Gerar recibo em duas vias</label>
-          </div>
-        </div>
+<div class="full">
+<label>Locatário</label>
+<div style="display:grid; grid-template-columns:minmax(420px, 1fr) 240px; align-items:center; width:100%; gap:12px;">
+<input id="locatario" placeholder="Nome completo" style="width:100%;">
+<input id="cpfLocatario" placeholder="CPF/CNPJ">
+</div>
+</div>
 
-        <div style="text-align:center; margin-top:12px;">
-          <button type="button" class="btn" id="btnGerarAluguel">🏠 Gerar Recibo de Aluguel</button>
-        </div>
-      </form>
-    </div>
 
-    <!-- Aba Simples -->
-    <div id="aba-simples" class="tab" style="display:none;">
-      <form id="form-simples">
-        <div class="form-grid">
-          <div>
-            <label>Valor *</label>
-            <input type="number" id="valorSimples" step="0.01" required />
 
-            <label>Pagador *</label>
-            <div class="inline-row">
-              <input type="text" id="pagadorNome" placeholder="Nome do pagador" required />
-              <input type="text" id="pagadorCpf" placeholder="CPF/CNPJ" style="max-width:180px;" />
-            </div>
+<div>
+<label>CEP</label>
+<input id="cep" placeholder="00000-000">
+</div>
 
-            <label>Emissor (quem recebe)</label>
-            <div class="inline-row">
-              <input type="text" id="emissorNome" placeholder="Nome do emissor" />
-              <input type="text" id="emissorCpf" placeholder="CPF/CNPJ" style="max-width:180px;" />
-            </div>
+<div class="full">
 
-            <label>Referente a</label>
-            <input type="text" id="referente" placeholder="prestação de serviços, aluguel, etc." />
-          </div>
+<label>Endereço do Imóvel</label>
 
-          <div>
-            <label>Cidade *</label>
-            <input type="text" id="cidadeSimples" required />
+<div style="display:grid; grid-template-columns:2fr 120px 1fr 1fr 100px; gap:12px;">
 
-            <label>Data do Pagamento *</label>
-            <input type="date" id="dataPagamentoSimples" required />
+<input id="logradouro" placeholder="Rua / Avenida">
 
-            <label>Forma de Pagamento *</label>
-            <select id="formaPagamentoSimples" required>
-              <option>Dinheiro</option>
-              <option>Pix</option>
-              <option>Cheque</option>
-              <option>Transferência/Depósito</option>
-              <option>Cartão</option>
-            </select>
+<input id="numero" placeholder="Nº">
 
-            <label>Telefone (opcional)</label>
-            <input type="text" id="telefoneSimples" placeholder="(11) 99999-9999" />
-          </div>
+<input id="bairro" placeholder="Bairro">
 
-          <div class="full-row">
-            <label>Observações</label>
-            <textarea id="observacaoSimples" rows="3" placeholder="Observações adicionais..."></textarea>
-          </div>
+<input id="cidade" placeholder="Cidade">
 
-          <div class="full-row">
-            <label><input type="checkbox" id="duasViasSimples" /> Gerar recibo em duas vias</label>
-          </div>
-        </div>
+<input id="uf" placeholder="UF">
 
-        <div style="text-align:center; margin-top:12px;">
-          <button type="button" class="btn" id="btnGerarSimples">📄 Gerar Recibo Simples</button>
-        </div>
-      </form>
-    </div>
+</div>
 
-    <!-- Área do Recibo -->
-    <div id="reciboBox" class="recibo-box">
-      <div id="reciboContent"></div>
-      <div class="action-buttons">
-        <button class="btn" id="btnImprimir">🖨️ Imprimir</button>
-        <button class="btn secondary" id="btnEditar">✏️ Editar</button>
-      </div>
-    </div>
+</div>
 
+
+<div>
+<label>Mês Referência</label>
+<select id="mes">
+<option>Janeiro</option>
+<option>Fevereiro</option>
+<option>Março</option>
+<option>Abril</option>
+<option>Maio</option>
+<option>Junho</option>
+<option>Julho</option>
+<option>Agosto</option>
+<option>Setembro</option>
+<option>Outubro</option>
+<option>Novembro</option>
+<option>Dezembro</option>
+</select>
+</div>
+
+<div>
+<label>Ano</label>
+<input type="number" id="ano" value="2026">
+</div>
+
+<div>
+<label>Valor do Aluguel</label>
+<input id="valor" placeholder="R$ 0,00">
+</div>
+
+<div>
+<label>Forma de Pagamento</label>
+<select id="forma">
+<option>Pix</option>
+<option>Dinheiro</option>
+<option>Transferência</option>
+<option>Cartão</option>
+</select>
+</div>
+
+<div>
+<label>Data do Pagamento</label>
+<input type="date" id="dataPagamento">
+</div>
+
+<div class="full">
+<label>Observações</label>
+<textarea id="obs"></textarea>
+</div>
+
+<div class="full">
+<label>Parcelas / Pagamentos</label>
+<div id="parcelas"></div>
+
+<button class="btn btn-outline" style="margin-top:12px" onclick="adicionarParcela()">➕ Adicionar Parcela</button>
+</div>
+
+<div class="full">
+<label>Assinatura</label>
+<canvas id="assinaturaCanvas" class="assinatura"></canvas>
+
+<div style="margin-top:12px;">
+<button class="btn btn-outline" onclick="limparAssinatura()">🗑 Limpar Assinatura</button>
+</div>
+</div>
+
+</div>
+
+<div style="margin-top:24px;" class="actions">
+<button class="btn btn-outline" onclick="visualizar()">👁 Visualizar</button>
+<button class="btn btn-primary" onclick="gerarPDF()">⬇ Gerar PDF</button>
+</div>
+
+<div id="preview" class="preview"></div>
+
+</div>
+
+<div id="simples" class="tab-content">
+
+<div class="grid">
+
+<div>
+<label>Emissor</label>
+<input id="emissor">
+</div>
+
+<div>
+<label>CPF Emissor</label>
+<input id="cpfEmissor">
+</div>
+
+<div>
+<label>Pagador</label>
+<input id="pagador">
+</div>
+
+<div>
+<label>CPF Pagador</label>
+<input id="cpfPagador">
+</div>
+
+<div>
+<label>Valor</label>
+<input id="valorSimples" placeholder="R$ 0,00">
+</div>
+
+<div>
+<label>Data</label>
+<input type="date" id="dataSimples">
+</div>
+
+<div class="full">
+<label>Referente</label>
+<textarea id="referenteSimples"></textarea>
+</div>
+
+<div class="full">
+<label>Assinatura</label>
+<canvas id="assinaturaSimples" class="assinatura"></canvas>
+
+<div style="margin-top:12px;">
+<button class="btn btn-outline" onclick="limparAssinaturaSimples()">🗑 Limpar Assinatura</button>
+</div>
+</div>
+
+</div>
+
+<div style="margin-top:24px;" class="actions">
+<button class="btn btn-outline" onclick="visualizarSimples()">👁 Visualizar</button>
+<button class="btn btn-primary" onclick="gerarPDFSimples()">⬇ Gerar PDF</button>
+</div>
+
+<div id="previewSimples" class="preview"></div>
+
+</div>
+
+<div id="historico" class="tab-content">
+<h2>Histórico</h2>
+<div id="historicoLista"></div>
+</div>
+
+</div>
+</div>
+
+<script>
+
+// tema
+const toggleTheme = document.getElementById('toggleTheme');
+
+if(localStorage.getItem('theme')==='dark'){
+ document.body.classList.add('dark');
+}
+
+toggleTheme.addEventListener('click',()=>{
+ document.body.classList.toggle('dark');
+
+ localStorage.setItem(
+  'theme',
+  document.body.classList.contains('dark') ? 'dark':'light'
+ );
+});
+
+// tabs
+document.querySelectorAll('.tab').forEach(tab=>{
+ tab.addEventListener('click',()=>{
+
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+
+  tab.classList.add('active');
+
+  document.getElementById(tab.dataset.tab).classList.add('active');
+
+ });
+});
+
+document.getElementById('btnHistorico').onclick=()=>{
+ document.querySelector('[data-tab="historico"]').click();
+}
+
+document.getElementById('btnNovo').onclick=()=>{
+ document.querySelector('[data-tab="aluguel"]').click();
+}
+
+// assinatura aluguel
+const canvas = document.getElementById('assinaturaCanvas');
+const ctx = canvas.getContext('2d');
+
+// assinatura simples
+const canvasS = document.getElementById('assinaturaSimples');
+const ctxS = canvasS.getContext('2d');
+
+function configurarAssinatura(canvas,ctx){
+
+ canvas.width=320;
+ canvas.height=120;
+
+ ctx.lineWidth=2;
+ ctx.lineCap='round';
+
+ let desenhando=false;
+
+ function pos(e){
+
+  const rect = canvas.getBoundingClientRect();
+
+  if(e.touches){
+   return {
+    x:e.touches[0].clientX - rect.left,
+    y:e.touches[0].clientY - rect.top
+   }
+  }
+
+  return {
+   x:e.offsetX,
+   y:e.offsetY
+  }
+ }
+
+ function iniciar(e){
+  desenhando=true;
+
+  const p=pos(e);
+
+  ctx.beginPath();
+  ctx.moveTo(p.x,p.y);
+ }
+
+ function desenhar(e){
+
+  if(!desenhando) return;
+
+  e.preventDefault();
+
+  const p=pos(e);
+
+  ctx.lineTo(p.x,p.y);
+  ctx.stroke();
+ }
+
+ function parar(){
+  desenhando=false;
+ }
+
+ canvas.addEventListener('mousedown',iniciar);
+ canvas.addEventListener('mousemove',desenhar);
+ canvas.addEventListener('mouseup',parar);
+
+ canvas.addEventListener('touchstart',iniciar);
+ canvas.addEventListener('touchmove',desenhar);
+ canvas.addEventListener('touchend',parar);
+
+}
+
+configurarAssinatura(canvas,ctx);
+configurarAssinatura(canvasS,ctxS);
+
+function limparAssinatura(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);
+}
+
+function limparAssinaturaSimples(){
+ ctxS.clearRect(0,0,canvasS.width,canvasS.height);
+}
+
+// parcelas
+function adicionarParcela(){
+
+ const container=document.getElementById('parcelas');
+
+ const qtd=container.children.length + 2;
+
+ const div=document.createElement('div');
+
+ div.className='pagamento-item';
+
+ div.innerHTML=`
+ <strong>Parcela ${qtd}</strong>
+ <div style="margin-top:10px;">
+  <input placeholder="Valor">
+ </div>
+
+ 
+<div style="margin-top:10px;">
+  <input type="date">
+ </div>
+
+ <div style="margin-top:10px;">
+  <button class="btn btn-outline" onclick="this.closest('.pagamento-item').remove()">🗑 Excluir</button>
+ </div>
+ `;
+
+
+ container.appendChild(div);
+
+}
+
+// preview aluguel
+function visualizar(){
+
+ const parcelas=[...document.querySelectorAll('#parcelas .pagamento-item')].map((p,i)=>{
+
+  const inputs=p.querySelectorAll('input');
+
+  return `
+   <p style="margin-top:10px;">
+   <strong>${i+2}</strong> - ${inputs[0].value} - ${inputs[1].value}
+   </p>
+  `;
+ }).join('');
+
+ const html=`
+ <h1>RECIBO DE ALUGUEL</h1>
+
+ <p style="margin-top:18px;"><strong>LOCADOR:</strong> ${locador.value} (CPF: ${cpfLocador.value})</p>
+
+ <p style="margin-top:10px;"><strong>LOCATÁRIO:</strong> ${locatario.value} (CPF: ${cpfLocatario.value})</p>
+
+ <p style="margin-top:10px;"><strong>IMÓVEL:</strong> ${logradouro.value}, Nº ${numero.value} - ${bairro.value} - ${cidade.value}/${uf.value} - CEP ${cep.value}</p>
+
+ <p style="margin-top:10px;"><strong>REFERÊNCIA:</strong> ${mes.value}/${ano.value}</p>
+
+ <p style="margin-top:10px;"><strong>VALOR:</strong> ${valor.value}</p>
+
+ <p style="margin-top:10px;"><strong>FORMA DE PAGAMENTO:</strong> ${forma.value}</p>
+
+ <p style="margin-top:10px;"><strong>DATA DO PAGAMENTO:</strong> ${formatarData(dataPagamento.value)}</p>
+
+ <p style="margin-top:10px;"><strong>OBSERVAÇÕES:</strong><br>${obs.value.replaceAll('\n','<br>')}</p>
+
+ ${parcelas}
+
+ <div style="margin-top:40px;">
+  <img src="${canvas.toDataURL()}" style="max-width:260px;">
+  <br>
+  ______________________________________
+  <br>
+  Assinatura
+ </div>
+ `;
+
+ document.getElementById('preview').innerHTML=html;
+
+ salvarHistorico('Aluguel',locador.value,valor.value);
+
+}
+
+// preview simples
+function visualizarSimples(){
+
+ const html=`
+ <h1>RECIBO SIMPLES</h1>
+
+ <p style="margin-top:18px;"><strong>EMISSOR:</strong> ${emissor.value}</p>
+
+ <p style="margin-top:10px;"><strong>CPF EMISSOR:</strong> ${cpfEmissor.value}</p>
+
+ <p style="margin-top:10px;"><strong>PAGADOR:</strong> ${pagador.value}</p>
+
+ <p style="margin-top:10px;"><strong>CPF PAGADOR:</strong> ${cpfPagador.value}</p>
+
+ <p style="margin-top:10px;"><strong>VALOR:</strong> ${valorSimples.value}</p>
+
+ <p style="margin-top:10px;"><strong>DATA:</strong> ${formatarData(dataSimples.value)}</p>
+
+ <p style="margin-top:10px;"><strong>REFERENTE:</strong><br>${referenteSimples.value.replaceAll('\n','<br>')}</p>
+
+ <div style="margin-top:40px;">
+  <img src="${canvasS.toDataURL()}" style="max-width:260px;">
+  <br>
+  ______________________________________
+  <br>
+  Assinatura
+ </div>
+ `;
+
+ document.getElementById('previewSimples').innerHTML=html;
+
+ salvarHistorico('Simples',pagador.value,valorSimples.value);
+
+}
+
+// historico
+function salvarHistorico(tipo,nome,valorRecibo){
+
+ const historico = JSON.parse(localStorage.getItem('historicoRecibos')) || [];
+
+ historico.push({
+  tipo,
+  nome,
+  valor:valorRecibo,
+  data:new Date().toLocaleDateString('pt-BR')
+ });
+
+ localStorage.setItem('historicoRecibos',JSON.stringify(historico));
+
+ carregarHistorico();
+
+}
+
+function carregarHistorico(){
+
+ const historico = JSON.parse(localStorage.getItem('historicoRecibos')) || [];
+
+ historicoLista.innerHTML='';
+
+ historico.reverse().forEach(item=>{
+
+  historicoLista.innerHTML += `
+  <div class="historico-item">
+   <strong>${item.tipo}</strong><br>
+   ${item.nome}<br>
+   ${item.valor}<br>
+   ${item.data}
   </div>
+  `;
 
-  <script>
-    document.addEventListener('DOMContentLoaded', function(){
-      // Navegação entre abas
-      document.querySelectorAll('.nav-tab').forEach(tab => {
-        tab.addEventListener('click', (e) => {
-          document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
-          e.currentTarget.classList.add('active');
-          const target = e.currentTarget.getAttribute('data-tab');
-          document.querySelectorAll('.tab').forEach(t => t.style.display = 'none');
-          document.getElementById('aba-' + target).style.display = 'block';
-        });
-      });
+ });
 
-      // Define datas padrão (hoje) se vazio
-      const today = new Date().toISOString().split('T')[0];
-      const dAlug = document.getElementById('dataPagamentoAluguel');
-      const dSimp = document.getElementById('dataPagamentoSimples');
-      if(dAlug && !dAlug.value) dAlug.value = today;
-      if(dSimp && !dSimp.value) dSimp.value = today;
+}
 
-      // Auto preenchimento de endereço via CEP
-      const cepInput = document.getElementById('cep');
-      cepInput.addEventListener('blur', async () => {
-        try{
-          const cep = cepInput.value.replace(/\D/g, '');
-          if(cep.length === 8){
-            const res = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
-            const data = await res.json();
-            if(!data.erro){
-              // preenche somente se vazio para não sobrescrever
-              if(document.getElementById('endereco').value.trim()==='') document.getElementById('endereco').value = data.logradouro || '';
-              if(document.getElementById('bairro').value.trim()==='') document.getElementById('bairro').value = data.bairro || '';
-              if(document.getElementById('cidade').value.trim()==='') document.getElementById('cidade').value = data.localidade || '';
-              if(document.getElementById('uf').value.trim()==='') document.getElementById('uf').value = data.uf || '';
-            }
-          }
-        }catch(err){
-          console.error('Erro ao buscar CEP:', err);
-        }
-      });
+carregarHistorico();
 
-      // ----- Função número por extenso (reais e centavos) -----
-      function threeDigitsToWords(n){
-        const unidades = ["zero","um","dois","três","quatro","cinco","seis","sete","oito","nove","dez","onze","doze","treze","quatorze","quinze","dezesseis","dezessete","dezoito","dezenove"];
-        const dezenas = ["","","vinte","trinta","quarenta","cinquenta","sessenta","setenta","oitenta","noventa"];
-        const centenas = ["","cento","duzentos","trezentos","quatrocentos","quinhentos","seiscentos","setecentos","oitocentos","novecentos"];
-        n = Number(n);
-        if(n === 0) return '';
-        if(n === 100) return 'cem';
-        let s = '';
-        const c = Math.floor(n/100);
-        const resto = n % 100;
-        if(c > 0) s += centenas[c];
-        if(resto > 0){
-          if(s) s += ' e ';
-          if(resto < 20) s += unidades[resto];
-          else {
-            const d = Math.floor(resto/10);
-            const u = resto % 10;
-            s += dezenas[d];
-            if(u > 0) s += ' e ' + unidades[u];
-          }
-        }
-        return s;
-      }
+// pdf
+async function gerarPDF(){
 
-      function numeroPorExtenso(valor){
-        // valor: number (ex: 1234.56)
-        let totalCentavos = Math.round((Number(valor) || 0) * 100);
-        let reais = Math.floor(totalCentavos / 100);
-        let centavos = totalCentavos % 100;
+ if(preview.innerHTML.trim()===''){
+  alert('Visualize o recibo primeiro');
+  return;
+ }
 
-        if(reais === 0 && centavos === 0) return 'zero reais';
+ const canvasPDF = await html2canvas(preview,{scale:2});
 
-        // converte partes em grupos de 3 dígitos
-        const escalasSingular = ['', 'mil', 'milhão', 'bilhão', 'trilhão'];
-        const escalasPlural = ['', 'mil', 'milhões', 'bilhões', 'trilhões'];
+ const imagem = canvasPDF.toDataURL('image/png');
 
-        function intToWords(n){
-          if(n === 0) return '';
-          let grupos = [];
-          while(n > 0){ grupos.push(n % 1000); n = Math.floor(n / 1000); }
-          let partes = [];
-          for(let i = grupos.length -1; i >= 0; i--){
-            const g = grupos[i];
-            if(g === 0) continue;
-            const textoGrupo = threeDigitsToWords(g);
-            if(i === 0){
-              partes.push(textoGrupo);
-            } else if(i === 1){
-              if(g === 1) partes.push('mil');
-              else partes.push(textoGrupo + ' mil');
-            } else {
-              if(g === 1) partes.push(textoGrupo + ' ' + escalasSingular[i]);
-              else partes.push(textoGrupo + ' ' + escalasPlural[i]);
-            }
-          }
-          if(partes.length === 0) return '';
-          if(partes.length === 1) return partes[0];
-          // juntar com vírgulas e ' e ' antes do último
-          const last = partes.pop();
-          return partes.join(', ') + ' e ' + last;
-        }
+ const {jsPDF}=window.jspdf;
 
-        let textoReais = intToWords(reais);
-        if(textoReais){
-          textoReais += (reais === 1 ? ' real' : ' reais');
-        }
-        let textoCentavos = '';
-        if(centavos > 0){
-          const textoC = threeDigitsToWords(centavos);
-          textoCentavos = textoC + (centavos === 1 ? ' centavo' : ' centavos');
-        }
+ const pdf = new jsPDF('p','mm','a4');
 
-        if(textoReais && textoCentavos) return textoReais + ' e ' + textoCentavos;
-        if(textoReais) return textoReais;
-        return textoCentavos; // only centavos
-      }
+ const largura = 190;
+ const altura = canvasPDF.height * largura / canvasPDF.width;
 
-      // utilitários de formatação
-      function formatarMoeda(v){
-        const n = Number(v) || 0;
-        return new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL' }).format(n);
-      }
-      function formatarData(d){ if(!d) return ''; return new Date(d).toLocaleDateString('pt-BR'); }
+ pdf.addImage(imagem,'PNG',10,10,largura,altura);
 
-      // Gerar Recibo de Aluguel (com todos os campos)
-      document.getElementById('btnGerarAluguel').addEventListener('click', () => {
-        const dados = {
-          locador: (document.getElementById('locador').value || '').trim(),
-          cpfLocador: (document.getElementById('cpfLocador').value || '').trim(),
-          locatario: (document.getElementById('locatario').value || '').trim(),
-          cpfLocatario: (document.getElementById('cpfLocatario').value || '').trim(),
-          mes: (document.getElementById('mesReferencia').value || '').trim(),
-          ano: (document.getElementById('ano').value || '').trim(),
-          tipoImovel: (document.getElementById('tipoImovel').value || '').trim(),
-          cep: (document.getElementById('cep').value || '').trim(),
-          endereco: (document.getElementById('endereco').value || '').trim(),
-          numero: (document.getElementById('numero').value || '').trim(),
-          complemento: (document.getElementById('complemento').value || '').trim(),
-          bairro: (document.getElementById('bairro').value || '').trim(),
-          cidade: (document.getElementById('cidade').value || '').trim(),
-          uf: (document.getElementById('uf').value || '').trim(),
-          valor: (document.getElementById('valorAluguel').value || '').trim(),
-          forma: (document.getElementById('formaPagamentoAluguel').value || '').trim(),
-          data: (document.getElementById('dataPagamentoAluguel').value || '').trim(),
-          observacao: (document.getElementById('observacaoAluguel').value || '').trim(),
-          duasVias: document.getElementById('duasViasAluguel').checked
-        };
+ pdf.save('recibo-aluguel.pdf');
 
-        // validação
-        if(!dados.locador || !dados.locatario || !dados.mes || !dados.ano || !dados.endereco || !dados.numero || !dados.bairro || !dados.cidade || !dados.uf || !dados.valor || !dados.forma || !dados.data){
-          alert('Preencha todos os campos obrigatórios (*)');
-          return;
-        }
+}
 
-        const valorNum = parseFloat(dados.valor.replace(/,/g, '.')) || 0;
-        let mainHtml = `<div class="recibo-header"><h2>RECIBO DE ALUGUEL</h2></div>`;
-        mainHtml += `<p><strong>LOCADOR:</strong> ${dados.locador}${dados.cpfLocador ? ' (CPF/CNPJ: '+dados.cpfLocador+')' : ''}</p>`;
-        mainHtml += `<p><strong>LOCATÁRIO:</strong> ${dados.locatario}${dados.cpfLocatario ? ' (CPF/CNPJ: '+dados.cpfLocatario+')' : ''}</p>`;
-        mainHtml += `<p><strong>IMÓVEL:</strong> ${dados.tipoImovel ? dados.tipoImovel + ' - ' : ''}${dados.endereco}, ${dados.numero}${dados.complemento ? ' - '+dados.complemento : ''} - ${dados.bairro}, ${dados.cidade}/${dados.uf} - CEP: ${dados.cep}</p>`;
-        mainHtml += `<p><strong>REFERÊNCIA:</strong> ${dados.mes}/${dados.ano}</p>`;
-        mainHtml += `<p><strong>VALOR:</strong> ${formatarMoeda(valorNum)} (${numeroPorExtenso(valorNum)})</p>`;
-        mainHtml += `<p><strong>FORMA DE PAGAMENTO:</strong> ${dados.forma}</p>`;
-        mainHtml += `<p><strong>DATA DO PAGAMENTO:</strong> ${formatarData(dados.data)}</p>`;
-        if(dados.observacao) mainHtml += `<p><strong>OBSERVAÇÕES:</strong> ${dados.observacao}</p>`;
-        mainHtml += `<div class="assinatura">______________________________________<br>Assinatura</div>`;
+async function gerarPDFSimples(){
 
-        let finalHtml = mainHtml;
-        if(dados.duasVias){
-          finalHtml += `<hr style="border:2px dashed #ccc; margin-top:20px; margin-bottom:20px;">` + mainHtml.replace('RECIBO DE ALUGUEL','RECIBO DE ALUGUEL - 2ª VIA');
-        }
+ if(previewSimples.innerHTML.trim()===''){
+  alert('Visualize o recibo primeiro');
+  return;
+ }
 
-        document.getElementById('reciboContent').innerHTML = finalHtml;
-        document.getElementById('reciboBox').style.display = 'block';
-        window.scrollTo(0, document.getElementById('reciboBox').offsetTop);
-      });
+ const canvasPDF = await html2canvas(previewSimples,{scale:2});
 
-      // Gerar Recibo Simples (completo)
-      document.getElementById('btnGerarSimples').addEventListener('click', () => {
-        const dados = {
-          valor: (document.getElementById('valorSimples').value || '').trim(),
-          pagadorNome: (document.getElementById('pagadorNome').value || '').trim(),
-          pagadorCpf: (document.getElementById('pagadorCpf').value || '').trim(),
-          emissorNome: (document.getElementById('emissorNome').value || '').trim(),
-          emissorCpf: (document.getElementById('emissorCpf').value || '').trim(),
-          referente: (document.getElementById('referente').value || '').trim(),
-          cidade: (document.getElementById('cidadeSimples').value || '').trim(),
-          data: (document.getElementById('dataPagamentoSimples').value || '').trim(),
-          forma: (document.getElementById('formaPagamentoSimples').value || '').trim(),
-          telefone: (document.getElementById('telefoneSimples').value || '').trim(),
-          observacao: (document.getElementById('observacaoSimples').value || '').trim(),
-          duasVias: document.getElementById('duasViasSimples').checked
-        };
+ const imagem = canvasPDF.toDataURL('image/png');
 
-        if(!dados.valor || !dados.pagadorNome || !dados.cidade || !dados.data || !dados.forma){
-          alert('Preencha todos os campos obrigatórios (*)');
-          return;
-        }
+ const {jsPDF}=window.jspdf;
 
-        const valorNum = parseFloat(dados.valor.replace(/,/g, '.')) || 0;
-        let mainHtml = `<div class="recibo-header"><h2>RECIBO</h2></div>`;
-        mainHtml += `<p><strong>Valor:</strong> ${formatarMoeda(valorNum)} (${numeroPorExtenso(valorNum)})</p>`;
-        mainHtml += `<p><strong>Pagador:</strong> ${dados.pagadorNome}${dados.pagadorCpf ? ' (CPF/CNPJ: '+dados.pagadorCpf+')' : ''}</p>`;
-        if(dados.emissorNome) mainHtml += `<p><strong>Emissor:</strong> ${dados.emissorNome}${dados.emissorCpf ? ' (CPF/CNPJ: '+dados.emissorCpf+')' : ''}</p>`;
-        if(dados.referente) mainHtml += `<p><strong>Referente a:</strong> ${dados.referente}</p>`;
-        mainHtml += `<p><strong>Cidade/Data:</strong> ${dados.cidade}, ${formatarData(dados.data)}</p>`;
-        mainHtml += `<p><strong>Forma de Pagamento:</strong> ${dados.forma}</p>`;
-        if(dados.telefone) mainHtml += `<p><strong>Telefone:</strong> ${dados.telefone}</p>`;
-        if(dados.observacao) mainHtml += `<p><strong>Observações:</strong> ${dados.observacao}</p>`;
-        mainHtml += `<div class="assinatura">______________________________________<br>Assinatura</div>`;
+ const pdf = new jsPDF('p','mm','a4');
 
-        let finalHtml = mainHtml;
-        if(dados.duasVias){
-          finalHtml += `<hr style="border:2px dashed #ccc; margin-top:20px; margin-bottom:20px;">` + mainHtml.replace('RECIBO','RECIBO - 2ª VIA');
-        }
+ const largura = 190;
+ const altura = canvasPDF.height * largura / canvasPDF.width;
 
-        document.getElementById('reciboContent').innerHTML = finalHtml;
-        document.getElementById('reciboBox').style.display = 'block';
-        window.scrollTo(0, document.getElementById('reciboBox').offsetTop);
-      });
+ pdf.addImage(imagem,'PNG',10,10,largura,altura);
 
-      // Imprimir / Editar
-      document.getElementById('btnImprimir').addEventListener('click', () => window.print());
-      document.getElementById('btnEditar').addEventListener('click', () => document.getElementById('reciboBox').style.display = 'none');
+ pdf.save('recibo-simples.pdf');
 
-    });
-  </script>
+}
+
+
+
+// formatar data
+function formatarData(data){
+
+ if(!data) return '';
+
+ const [ano,mes,dia] = data.split('-');
+
+ return `${dia}/${mes}/${ano}`;
+
+}
+
+// moeda real
+function aplicarMascaraMoeda(id){
+
+ const campo = document.getElementById(id);
+
+ campo.addEventListener('input', e=>{
+
+   let v = e.target.value.replace(/\D/g,'');
+
+   v = (Number(v)/100).toFixed(2) + '';
+
+   v = v.replace('.',',');
+
+   v = v.replace(/(\d)(?=(\d{3})+(?!\d))/g,'$1.');
+
+   e.target.value = 'R$ ' + v;
+
+ });
+
+}
+
+aplicarMascaraMoeda('valor');
+aplicarMascaraMoeda('valorSimples');
+
+// CEP automático
+document.getElementById('cep').addEventListener('blur', async ()=>{
+
+ const cep = document.getElementById('cep').value.replace(/\D/g,'');
+
+ if(cep.length !== 8) return;
+
+ try{
+
+  const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+
+  const data = await response.json();
+
+  if(!data.erro){
+
+    document.getElementById('logradouro').value = data.logradouro || '';
+document.getElementById('bairro').value = data.bairro || '';
+document.getElementById('cidade').value = data.localidade || '';
+document.getElementById('uf').value = data.uf || '';
+
+  }
+
+ }catch(e){
+  console.log(e);
+ }
+
+});
+
+
+</script>
+
 </body>
 </html>

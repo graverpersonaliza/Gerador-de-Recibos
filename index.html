@@ -114,7 +114,7 @@ label{
 
 input,textarea,select{
  width:100%;
- padding:15px 16px;
+ padding:11px 12px;
  border-radius:12px;
  border:1px solid var(--border);
  background:var(--card);
@@ -142,7 +142,7 @@ textarea{min-height:120px}
 }
 
 .historico-item{
- padding:15px 16px;
+ padding:11px 12px;
  border-bottom:1px solid var(--border);
 }
 
@@ -325,7 +325,7 @@ document.getElementById('uf').value = data.uf || '';
 
 <div id="aluguel" class="tab-content active">
 
-<div class="grid">
+<div class="grid" style="max-width:980px;">
 
 
 <div class="full">
@@ -394,12 +394,12 @@ document.getElementById('uf').value = data.uf || '';
 
 <div>
 <label>Ano</label>
-<input type="number" id="ano" value="2026">
+<input type="number" id="ano" value="2026" style="max-width:140px;">
 </div>
 
 <div>
 <label>Valor do Aluguel</label>
-<input id="valor" placeholder="R$ 0,00">
+<input id="valor" placeholder="R$ 0,00" style="max-width:220px;">
 </div>
 
 <div>
@@ -414,7 +414,7 @@ document.getElementById('uf').value = data.uf || '';
 
 <div>
 <label>Data do Pagamento</label>
-<input type="date" id="dataPagamento">
+<input type="date" id="dataPagamento" style="max-width:190px;">
 </div>
 
 <div class="full">
@@ -475,12 +475,12 @@ document.getElementById('uf').value = data.uf || '';
 
 <div>
 <label>Valor</label>
-<input id="valorSimples" placeholder="R$ 0,00">
+<input id="valorSimples" placeholder="R$ 0,00" style="max-width:220px;">
 </div>
 
 <div>
 <label>Data</label>
-<input type="date" id="dataSimples">
+<input type="date" id="dataSimples" style="max-width:190px;">
 </div>
 
 <div class="full">
@@ -661,7 +661,7 @@ function adicionarParcela(){
 
  
 <div style="margin-top:10px;">
-  <input type="date">
+  <input type="date" style="max-width:190px;">
  </div>
 
  <div style="margin-top:10px;">
@@ -739,22 +739,26 @@ Data: ${formatarDataBR(inputs[1].value)}
 
  <p style="margin-top:10px;"><strong>DATA DO PAGAMENTO:</strong> ${formatarData(dataPagamento.value)}</p>
 
- <p style="margin-top:10px;"><strong>OBSERVAÇÕES:</strong><br>${obs.value.replaceAll('\n','<br>')}</p>
-
  ${parcelas}
 
- <div style="margin-top:40px;">
-  <img src="${canvas.toDataURL()}" style="max-width:260px;">
-  <br>
+ <div style="margin-top:30px; border-top:1px solid #ccc; padding-top:14px;">
+   <strong>OBSERVAÇÕES:</strong><br>
+   ${obs.value.replaceAll('\n','<br>')}
+ </div>
+
+ <div style="margin-top:20px;">
+  <img src="${canvas.toDataURL()}" style="max-width:220px; display:block; margin-bottom:-8px;">
+
   ______________________________________
   <br>
-  Assinatura
+
+  <span style="font-size:13px;">Assinatura</span>
  </div>
  `;
 
  document.getElementById('preview').innerHTML=html;
 
- salvarHistorico('Aluguel',locador.value,valor.value);
+ 
 
 }
 
@@ -778,18 +782,19 @@ function visualizarSimples(){
 
  <p style="margin-top:10px;"><strong>REFERENTE:</strong><br>${referenteSimples.value.replaceAll('\n','<br>')}</p>
 
- <div style="margin-top:40px;">
-  <img src="${canvasS.toDataURL()}" style="max-width:260px;">
-  <br>
+ <div style="margin-top:20px;">
+  <img src="${canvasS.toDataURL()}" style="max-width:220px; display:block; margin-bottom:-8px;">
+
   ______________________________________
   <br>
-  Assinatura
+
+  <span style="font-size:13px;">Assinatura</span>
  </div>
  `;
 
  document.getElementById('previewSimples').innerHTML=html;
 
- salvarHistorico('Simples',pagador.value,valorSimples.value);
+ 
 
 }
 
@@ -822,9 +827,9 @@ function carregarHistorico(){
   historicoLista.innerHTML += `
   <div class="historico-item">
 
-   <strong>Locador:</strong> ${item.nome}<br>
+   <strong>Pessoas:</strong> ${item.nome}<br>
 
-   <strong>Valor:</strong> ${item.valor}<br>
+   <strong>Valor:</strong> ${formatarMoeda(item.valor)}<br>
 
    <strong>Data:</strong> ${item.data}
 
@@ -868,6 +873,12 @@ async function gerarPDF(){
 
  pdf.save('recibo-aluguel.pdf');
 
+salvarHistorico(
+ 'Aluguel',
+ `${locador.value} → ${locatario.value}`,
+ valor.value
+);
+
 }
 
 async function gerarPDFSimples(){
@@ -891,6 +902,12 @@ async function gerarPDFSimples(){
  pdf.addImage(imagem,'PNG',10,10,largura,altura);
 
  pdf.save('recibo-simples.pdf');
+
+salvarHistorico(
+ 'Simples',
+ `${emissor.value} → ${pagador.value}`,
+ valorSimples.value
+);
 
 }
 

@@ -509,7 +509,12 @@ document.getElementById('uf').value = data.uf || '';
 </div>
 
 <div id="historico" class="tab-content">
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
 <h2>Histórico</h2>
+
+<button class="btn btn-outline" onclick="limparHistorico()">🗑 Limpar Histórico</button>
+</div>
+
 <div id="historicoLista"></div>
 </div>
 
@@ -642,7 +647,7 @@ function adicionarParcela(){
 
  const container=document.getElementById('parcelas');
 
- const qtd=container.children.length + 2;
+ const qtd=container.children.length + 1;
 
  const div=document.createElement('div');
 
@@ -651,7 +656,7 @@ function adicionarParcela(){
  div.innerHTML=`
  <strong>Parcela ${qtd}</strong>
  <div style="margin-top:10px;">
-  <input placeholder="Valor">
+  <input placeholder="Ex: 500,00">
  </div>
 
  
@@ -669,6 +674,38 @@ function adicionarParcela(){
 
 }
 
+
+
+// formatar moeda BRL
+function formatarMoeda(valor){
+
+ if(!valor) return 'R$ 0,00';
+
+ if(valor.includes('R$')) return valor;
+
+ let numero = Number(valor.replace(',','.'));
+
+ if(isNaN(numero)) numero = 0;
+
+ return numero.toLocaleString('pt-BR',{
+  style:'currency',
+  currency:'BRL'
+ });
+
+}
+
+// formatar data DD/MM/AAAA
+function formatarDataBR(data){
+
+ if(!data) return '';
+
+ const partes = data.split('-');
+
+ return `${partes[2]}/${partes[1]}/${partes[0]}`;
+
+}
+
+
 // preview aluguel
 function visualizar(){
 
@@ -678,7 +715,9 @@ function visualizar(){
 
   return `
    <p style="margin-top:10px;">
-   <strong>${i+2}</strong> - ${inputs[0].value} - ${inputs[1].value}
+   <strong>Pagamento ${i+1}</strong><br>
+Valor: ${formatarMoeda(inputs[0].value)}<br>
+Data: ${formatarDataBR(inputs[1].value)}
    </p>
   `;
  }).join('');
@@ -733,7 +772,7 @@ function visualizarSimples(){
 
  <p style="margin-top:10px;"><strong>CPF PAGADOR:</strong> ${cpfPagador.value}</p>
 
- <p style="margin-top:10px;"><strong>VALOR:</strong> ${valorSimples.value}</p>
+ <p style="margin-top:10px;"><strong>VALOR:</strong> ${formatarMoeda(valorSimples.value)}</p>
 
  <p style="margin-top:10px;"><strong>DATA:</strong> ${formatarData(dataSimples.value)}</p>
 
@@ -782,10 +821,13 @@ function carregarHistorico(){
 
   historicoLista.innerHTML += `
   <div class="historico-item">
-   <strong>${item.tipo}</strong><br>
-   ${item.nome}<br>
-   ${item.valor}<br>
-   ${item.data}
+
+   <strong>Locador:</strong> ${item.nome}<br>
+
+   <strong>Valor:</strong> ${item.valor}<br>
+
+   <strong>Data:</strong> ${item.data}
+
   </div>
   `;
 
@@ -794,6 +836,14 @@ function carregarHistorico(){
 }
 
 carregarHistorico();
+
+function limparHistorico(){
+
+ localStorage.removeItem('historicoRecibos');
+
+ carregarHistorico();
+
+}
 
 // pdf
 async function gerarPDF(){

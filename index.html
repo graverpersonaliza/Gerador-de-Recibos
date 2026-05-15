@@ -735,6 +735,50 @@ body.dark #recibo-preview-simples {
           </div>
         </div>
 
+        <div class="section-label">Cláusula de Atraso
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-left:8px;font-size:11px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;cursor:pointer">
+            <input type="checkbox" id="exibirMulta" onchange="atualizar()" style="width:auto;accent-color:var(--accent)"> Incluir no recibo
+          </label>
+        </div>
+
+        <div class="row" style="align-items:flex-start">
+          <div class="field">
+            <label>Dia do vencimento</label>
+            <div style="display:flex;align-items:center;gap:6px">
+              <select id="diaVencimento" onchange="atualizar()" style="width:72px;flex:none;padding:8px 6px">
+                <option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option><option value="5" selected>5</option><option value="6">6</option><option value="7">7</option><option value="8">8</option><option value="9">9</option><option value="10">10</option><option value="11">11</option><option value="12">12</option><option value="13">13</option><option value="14">14</option><option value="15">15</option><option value="16">16</option><option value="17">17</option><option value="18">18</option><option value="19">19</option><option value="20">20</option><option value="21">21</option><option value="22">22</option><option value="23">23</option><option value="24">24</option><option value="25">25</option><option value="26">26</option><option value="27">27</option><option value="28">28</option><option value="29">29</option><option value="30">30</option><option value="31">31</option>
+              </select>
+              <span style="font-size:11px;color:var(--muted);white-space:nowrap">de cada mês</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Multa por atraso</label>
+            <div style="display:flex;align-items:center;gap:4px">
+              <input type="number" id="multaPerc" value="2" min="0" step="0.1" oninput="atualizar()" style="width:60px;flex:none;text-align:center">
+              <span style="font-size:12px;color:var(--muted)">%</span>
+            </div>
+          </div>
+          <div class="field">
+            <label>Juros de mora</label>
+            <div style="display:flex;align-items:center;gap:4px">
+              <input type="number" id="jurosPerc" value="1" min="0" step="0.1" oninput="atualizar()" style="width:60px;flex:none;text-align:center">
+              <span style="font-size:12px;color:var(--muted)">% a.m.</span>
+            </div>
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Índice de reajuste</label>
+            <select id="indiceReajuste" onchange="atualizar()">
+              <option value="IGP-M">IGP-M (FGV)</option>
+              <option value="IPCA">IPCA (IBGE)</option>
+              <option value="INPC">INPC (IBGE)</option>
+              <option value="IVAR">IVAR (FGV)</option>
+              <option value="Nenhum">Sem reajuste</option>
+            </select>
+          </div>
+        </div>
+
         <div class="field">
           <label>Observações</label>
           <textarea id="obs" placeholder="Informações adicionais..." oninput="atualizar()"></textarea>
@@ -1149,9 +1193,22 @@ function buildReceiptAluguel(){
   const endereco = enderecoParts.join(', ');
   const cepVal = g('cep').value;
   const valorStr = g('valor').value||'R$ 0,00';
-  const valorExtenso = valorPorExtenso(valorStr);
+  const multaPerc = parseFloat(g('multaPerc').value)||2;
+  const jurosPerc = parseFloat(g('jurosPerc').value)||1;
+  const diaVenc = g('diaVencimento').value||'5';
+  const indice = g('indiceReajuste').value||'IGP-M';
+  const comMulta = g('exibirMulta').checked;
+  const valorNum = parseFloat(String(valorStr).replace(/[^\d,]/g,'').replace(',','.'));
+  const multaAbs = isNaN(valorNum) ? 0 : parseFloat((valorNum * multaPerc / 100).toFixed(2));
+  const jurosAbs = isNaN(valorNum) ? 0 : parseFloat((valorNum * jurosPerc / 100).toFixed(2));
+  const totalComMulta = valorNum + (comMulta ? multaAbs + jurosAbs : 0);
+  const totalStr = comMulta ? fmtMoeda(totalComMulta.toFixed(2).replace('.',',')) : valorStr;
+  const multaStr = fmtMoeda(multaAbs.toFixed(2).replace('.',','));
+  const jurosStr = fmtMoeda(jurosAbs.toFixed(2).replace('.',','));
+  const multaVal = multaStr;
+  const valorExtenso = valorPorExtenso(totalStr);
   const frase = locatario && locador
-    ? `Recebi(emos) de <strong>${locatario}</strong> a quantia de <strong>${valorStr}</strong> (<em>${valorExtenso}</em>), referente ao pagamento do aluguel do ${tipo} acima mencionado, correspondente ao mês de <strong>${g('mes').value} de ${g('ano').value}</strong>, via <strong>${g('forma').value}</strong>. Dou plena quitação pelo valor recebido.`
+    ? `Recebi(emos) de <strong>${locatario}</strong> a quantia de <strong>${totalStr}</strong> (<em>${valorExtenso}</em>), referente ao pagamento do aluguel do ${tipo} acima mencionado, correspondente ao mês de <strong>${g('mes').value} de ${g('ano').value}</strong>, via <strong>${g('forma').value}</strong>. Dou plena quitação pelo valor recebido.`
     : '';
 
   return `<div class="receipt-inner">
@@ -1184,15 +1241,46 @@ function buildReceiptAluguel(){
       </div>` : ''}
     </div>
 
-    <div class="receipt-value-box">
-      <div>
-        <div class="receipt-value-label">Valor do Aluguel</div>
-        <div style="font-size:11px;color:#6b7a99;margin-top:2px">Via ${g('forma').value}</div>
-      </div>
-      <div class="receipt-value-amount">${valorStr}</div>
+    <div class="receipt-value-box" style="${comMulta?'flex-direction:column;align-items:stretch;gap:8px':''}">
+      ${comMulta ? `
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;color:#6b7a99">Aluguel base</span>
+          <span style="font-size:15px;font-weight:600;color:#1a2035">${valorStr}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;color:#ea580c">Multa (${multaPerc}%)</span>
+          <span style="font-size:14px;font-weight:600;color:#ea580c">+ ${multaStr}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;color:#ea580c">Juros de mora (${jurosPerc}% a.m.)</span>
+          <span style="font-size:14px;font-weight:600;color:#ea580c">+ ${jurosStr}</span>
+        </div>
+        <div style="border-top:1px dashed #fed7aa;padding-top:8px;display:flex;justify-content:space-between;align-items:center">
+          <div>
+            <div style="font-size:11px;color:#6b7a99;font-weight:600">Total a pagar · Via ${g('forma').value}</div>
+          </div>
+          <div class="receipt-value-amount" style="color:#ea580c">${totalStr}</div>
+        </div>
+      ` : `
+        <div>
+          <div class="receipt-value-label">Valor do Aluguel</div>
+          <div style="font-size:11px;color:#6b7a99;margin-top:2px">Via ${g('forma').value}</div>
+        </div>
+        <div class="receipt-value-amount">${valorStr}</div>
+      `}
     </div>
 
     ${frase ? `<div style="background:#f0f4ff;border-left:3px solid #3b5bdb;border-radius:0 8px 8px 0;padding:12px 16px;font-size:13px;line-height:1.7;color:#1a2035;margin:14px 0">${frase}</div>` : ''}
+
+    ${g('exibirMulta').checked ? `<div style="background:#fff8f0;border:1px solid #fed7aa;border-radius:8px;padding:12px 16px;margin:14px 0;font-size:12px;line-height:1.7;color:#7c2d12">
+      <div style="font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:#ea580c;margin-bottom:6px">⚖️ Cláusula de Atraso — Lei 8.245/91 · Código Civil</div>
+      O aluguel vence todo dia <strong>${diaVenc}</strong> de cada mês. Em caso de atraso no pagamento:
+      <ul style="margin:6px 0 0 16px;padding:0">
+        <li>Multa de <strong>${multaPerc}%</strong> sobre o valor do aluguel${multaVal?' ('+multaVal+')':''} — art. 52, §2º da Lei 8.245/91</li>
+        <li>Juros de mora de <strong>${jurosPerc}% ao mês</strong> (pro rata die) — art. 406 do Código Civil</li>
+        <li>Reajuste anual pelo índice <strong>${indice}</strong> — art. 18 da Lei 8.245/91</li>
+      </ul>
+    </div>` : ''}
 
     ${parcelas ? `<div class="receipt-section">
       <div class="receipt-section-title">Parcelas</div>
@@ -1415,6 +1503,11 @@ function limparHistorico(){
 function limparAluguel(){
   ['locador','cpfLocador','locatario','cpfLocatario','cep','logradouro','numero','complemento','bairro','cidade','uf','valor','obs'].forEach(id=>g(id).value='');
   g('tipoImovel').value='imóvel';
+  g('multaPerc').value='2';
+  g('jurosPerc').value='1';
+  g('diaVencimento').value='5';
+  g('indiceReajuste').value='IGP-M';
+  g('exibirMulta').checked=false;
   g('dataPagamento').value = new Date().toISOString().split('T')[0];
   g('parcelas').innerHTML=''; parcelaCount=0;
   limparAssinatura('assinaturaCanvas','sigLabel');

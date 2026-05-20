@@ -742,7 +742,7 @@ body.dark #recibo-preview-simples {
         </div>
 
         <div class="row" style="align-items:flex-start">
-          <div class="field">
+          <div class="field" style="flex:0 0 200px">
             <label>Dia do vencimento</label>
             <div style="display:flex;align-items:center;gap:6px">
               <select id="diaVencimento" onchange="atualizar()" style="width:72px;flex:none;padding:8px 6px">
@@ -784,8 +784,32 @@ body.dark #recibo-preview-simples {
           <textarea id="obs" placeholder="Informações adicionais..." oninput="atualizar()"></textarea>
         </div>
 
+        <!-- DESPESAS -->
+        <div class="section-label">Despesas do Imóvel
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-left:8px;font-size:11px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;cursor:pointer">
+            <input type="checkbox" id="exibirDespesas" onchange="toggleDespesas();atualizar()" style="width:auto;accent-color:var(--accent)"> Incluir
+          </label>
+        </div>
+        <div id="despesasWrap" style="display:none">
+          <div id="despesaLista"></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <button class="btn btn-ghost btn-sm" onclick="addDespesa('Energia Elétrica')">⚡ Energia</button>
+            <button class="btn btn-ghost btn-sm" onclick="addDespesa('Água')">💧 Água</button>
+            <button class="btn btn-ghost btn-sm" onclick="addDespesa('Internet')">🌐 Internet</button>
+            <button class="btn btn-ghost btn-sm" onclick="addDespesa('Gás')">🔥 Gás</button>
+            <button class="btn btn-ghost btn-sm" onclick="addDespesa('Condomínio')">🏢 Condomínio</button>
+            <button class="btn btn-ghost btn-sm" onclick="addDespesa('IPTU')">📋 IPTU</button>
+            <button class="btn btn-ghost btn-sm" onclick="addDespesa('')">＋ Outra</button>
+          </div>
+        </div>
+
         <!-- PARCELAS -->
-        <div class="section-label">Parcelas / Pagamentos adicionais</div>
+        <div class="section-label">Parcelamento
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-left:8px;font-size:11px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;cursor:pointer">
+            Juros: <input type="number" id="jurosParcela" value="0" min="0" step="0.1" oninput="atualizar()" style="width:46px;padding:2px 5px;font-size:11px;border-radius:5px;border:1px solid var(--border)">
+            <span style="color:var(--muted)">% a.m.</span>
+          </label>
+        </div>
         <div id="parcelas"></div>
         <button class="btn btn-ghost btn-sm" onclick="adicionarParcela()" style="width:100%;justify-content:center;margin-bottom:10px">＋ Adicionar parcela</button>
 
@@ -1132,26 +1156,39 @@ function adicionarParcela(){
     <span class="parcela-num">#${id}</span>
     <div>
       <label style="margin:0 0 2px;font-size:10px">Valor</label>
-      <input placeholder="R$ 0,00" oninput="maskInline(this);atualizar()" style="padding:5px 8px;font-size:12px">
+      <input class="parcela-valor" placeholder="R$ 0,00" oninput="maskInline(this);calcParcelaJuros(this);atualizar()" style="padding:5px 8px;font-size:12px">
     </div>
     <div>
       <label style="margin:0 0 2px;font-size:10px">Data</label>
       <input type="date" oninput="atualizar()" style="padding:5px 8px;font-size:12px">
     </div>
-    <button class="btn btn-ghost btn-icon btn-sm" onclick="document.getElementById('parcela-${id}').remove();atualizar()" title="Remover">✕</button>
+    <div style="flex:0 0 auto;text-align:center">
+      <label style="margin:0 0 2px;font-size:10px;color:#ea580c">c/ Juros</label>
+      <div class="parcela-total" style="font-size:12px;font-weight:700;color:#ea580c;min-width:72px;line-height:28px">—</div>
+    </div>
+    <button class="btn btn-ghost btn-icon btn-sm" onclick="document.getElementById('parcela-${id}').remove();renumParcelas();atualizar()" title="Remover">✕</button>
   `;
   g('parcelas').appendChild(div);
   maskInlineById('parcela-'+id);
 }
 
+function renumParcelas(){
+  document.querySelectorAll('#parcelas .parcela-item').forEach((el,i)=>{
+    const num = el.querySelector('.parcela-num');
+    if(num) num.textContent = '#'+(i+1);
+  });
+}
+
 function maskInlineById(pId){
-  const el = document.querySelector('#'+pId+' input[type!=date]');
-  if(!el) return;
-  el.addEventListener('input',e=>{
-    let v = e.target.value.replace(/\D/g,'');
-    v = (Number(v)/100).toFixed(2)+'';
-    v = v.replace('.',',').replace(/(\d)(?=(\d{3})+(?!\d))/g,'$1.');
-    e.target.value = 'R$ '+v;
+  const inputs = document.querySelectorAll('#'+pId+' input');
+  inputs.forEach(el=>{
+    if(el.type==='date'||el.type==='number') return;
+    el.addEventListener('input',e=>{
+      let v = e.target.value.replace(/\D/g,'');
+      v = (Number(v)/100).toFixed(2)+'';
+      v = v.replace('.',',').replace(/(\d)(?=(\d{3})+(?!\d))/g,'$1.');
+      e.target.value = 'R$ '+v;
+    });
   });
 }
 
@@ -1160,6 +1197,44 @@ function maskInline(el){
   v = (Number(v)/100).toFixed(2)+'';
   v = v.replace('.',',').replace(/(\d)(?=(\d{3})+(?!\d))/g,'$1.');
   el.value = 'R$ '+v;
+}
+
+function calcParcelaJuros(valorInput){
+  const wrap = valorInput.closest('.parcela-item');
+  const totalEl = wrap.querySelector('.parcela-total');
+  if(!totalEl) return;
+  const j = parseFloat(g('jurosParcela').value)||0;
+  const v = parseFloat(String(valorInput.value).replace(/[^\d,]/g,'').replace(',','.'));
+  if(!j || isNaN(v)||v===0){ totalEl.textContent='—'; return; }
+  const total = v * (1 + j/100);
+  totalEl.textContent = fmtMoeda(total.toFixed(2).replace('.',','));
+}
+
+let despesaCount = 0;
+function addDespesa(nome){
+  despesaCount++;
+  const id = 'desp-'+despesaCount;
+  const div = document.createElement('div');
+  div.className = 'parcela-item';
+  div.id = id;
+  div.innerHTML = `
+    <div style="flex:1">
+      <label style="margin:0 0 2px;font-size:10px">Despesa</label>
+      <input value="${nome}" placeholder="Nome da despesa" oninput="atualizar()" style="padding:5px 8px;font-size:12px">
+    </div>
+    <div style="flex:0 0 110px">
+      <label style="margin:0 0 2px;font-size:10px">Valor</label>
+      <input placeholder="R$ 0,00" oninput="maskInline(this);atualizar()" style="padding:5px 8px;font-size:12px">
+    </div>
+    <button class="btn btn-ghost btn-icon btn-sm" onclick="document.getElementById('${id}').remove();atualizar()" title="Remover">✕</button>
+  `;
+  g('despesaLista').appendChild(div);
+  maskInlineById(id);
+}
+
+function toggleDespesas(){
+  const show = g('exibirDespesas').checked;
+  g('despesasWrap').style.display = show ? 'block' : 'none';
 }
 
 // ═══════════════════════════════════════
@@ -1174,18 +1249,7 @@ function buildReceiptAluguel(){
   const sigData = canvas.toDataURL();
   const hasSig = isSigned('assinaturaCanvas');
 
-  const parcelas = [...document.querySelectorAll('#parcelas .parcela-item')].map((p,i)=>{
-    const inputs = p.querySelectorAll('input');
-    const v = inputs[0]?.value||'';
-    const d = fmtData(inputs[1]?.value||'');
-    if(!v && !d) return '';
-    return `<div class="receipt-parcela-row">
-      <span><strong>Parcela ${i+1}</strong></span>
-      <span>${fmtMoeda(v)}</span>
-      <span style="color:#6b7a99;font-size:12px">${d}</span>
-    </div>`;
-  }).join('');
-
+  // ── valores e multa (declarar primeiro) ──
   const obs = g('obs').value.trim();
   const tipo = g('tipoImovel').value;
   const complemento = g('complemento').value.trim();
@@ -1210,6 +1274,64 @@ function buildReceiptAluguel(){
   const frase = locatario && locador
     ? `Recebi(emos) de <strong>${locatario}</strong> a quantia de <strong>${totalStr}</strong> (<em>${valorExtenso}</em>), referente ao pagamento do aluguel do ${tipo} acima mencionado, correspondente ao mês de <strong>${g('mes').value} de ${g('ano').value}</strong>, via <strong>${g('forma').value}</strong>. Dou plena quitação pelo valor recebido.`
     : '';
+
+  // ── parcelas ──
+  const jp = parseFloat(g('jurosParcela').value)||0;
+  const parcelas = [...document.querySelectorAll('#parcelas .parcela-item')].map((p,i)=>{
+    const inputs = p.querySelectorAll('input');
+    const v = inputs[0]?.value||'';
+    const d = fmtData(inputs[1]?.value||'');
+    if(!v && !d) return '';
+    const vNum = parseFloat(String(v).replace(/[^\d,]/g,'').replace(',','.'));
+    const vComJuros = jp && !isNaN(vNum) ? vNum*(1+jp/100) : null;
+    return `<div class="receipt-parcela-row">
+      <span><strong>Parcela ${i+1}</strong></span>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px">
+        ${vComJuros ? `<span style="font-size:11px;color:#6b7a99;text-decoration:line-through">${fmtMoeda(v)}</span>
+        <span style="font-weight:700;color:#ea580c">${fmtMoeda(vComJuros.toFixed(2).replace('.',','))} <span style="font-size:10px">(+${jp}%)</span></span>` : `<span>${fmtMoeda(v)}</span>`}
+      </div>
+      <span style="color:#6b7a99;font-size:12px">${d}</span>
+    </div>`;
+  }).join('');
+
+  // ── despesas ──
+  const despesas = g('exibirDespesas').checked
+    ? [...document.querySelectorAll('#despesaLista .parcela-item')].map(p=>{
+        const inputs = p.querySelectorAll('input');
+        const nome = inputs[0]?.value||'Despesa';
+        const v = inputs[1]?.value||'';
+        if(!v) return '';
+        return `<div class="receipt-parcela-row">
+          <span>${nome}</span>
+          <span>${fmtMoeda(v)}</span>
+          <span></span>
+        </div>`;
+      }).filter(Boolean).join('')
+    : '';
+
+  // ── total geral ──
+  // Se há parcelas, soma-as (com juros); senão usa valor base (com multa se houver)
+  const parcelaEls = [...document.querySelectorAll('#parcelas .parcela-item')];
+  let totalParcelas = 0;
+  parcelaEls.forEach(p=>{
+    const inputs = p.querySelectorAll('input');
+    const v = parseFloat(String(inputs[0]?.value||'').replace(/[^\d,]/g,'').replace(',','.'));
+    if(!isNaN(v) && v > 0){
+      totalParcelas += jp ? v*(1+jp/100) : v;
+    }
+  });
+  const temParcelas = parcelaEls.length > 0 && totalParcelas > 0;
+  let totalGeral = temParcelas ? totalParcelas : (comMulta ? totalComMulta : (isNaN(valorNum) ? 0 : valorNum));
+  const despesaEls = g('exibirDespesas').checked
+    ? [...document.querySelectorAll('#despesaLista .parcela-item')] : [];
+  let totalDespesas = 0;
+  despesaEls.forEach(p=>{
+    const v = parseFloat(String(p.querySelectorAll('input')[1]?.value||'').replace(/[^\d,]/g,'').replace(',','.'));
+    if(!isNaN(v)) totalDespesas += v;
+  });
+  totalGeral += totalDespesas;
+  const mostrarTotal = temParcelas || totalDespesas > 0 || (despesas && despesas.length > 0);
+  const totalGeralStr = totalGeral > 0 ? fmtMoeda(totalGeral.toFixed(2).replace('.',',')) : '';
 
   return `<div class="receipt-inner">
     <div class="receipt-header">
@@ -1283,8 +1405,18 @@ function buildReceiptAluguel(){
     </div>` : ''}
 
     ${parcelas ? `<div class="receipt-section">
-      <div class="receipt-section-title">Parcelas</div>
+      <div class="receipt-section-title">Parcelamento${jp ? ' · Juros '+jp+'% a.m.' : ''}</div>
       <div class="receipt-parcelas">${parcelas}</div>
+    </div>` : ''}
+
+    ${despesas ? `<div class="receipt-section">
+      <div class="receipt-section-title">Despesas do Imóvel</div>
+      <div class="receipt-parcelas">${despesas}</div>
+    </div>` : ''}
+
+    ${mostrarTotal ? `<div style="display:flex;justify-content:space-between;align-items:center;background:#eef2ff;border-radius:8px;padding:10px 16px;margin:8px 0;font-weight:700;font-size:14px">
+      <span style="color:#3b5bdb">Total Geral</span>
+      <span style="color:#3b5bdb;font-size:18px">${totalGeralStr}</span>
     </div>` : ''}
 
     ${obs ? `<div class="receipt-obs">${obs.replace(/\n/g,'<br>')}</div>` : ''}
@@ -1510,6 +1642,9 @@ function limparAluguel(){
   g('exibirMulta').checked=false;
   g('dataPagamento').value = new Date().toISOString().split('T')[0];
   g('parcelas').innerHTML=''; parcelaCount=0;
+  g('despesaLista').innerHTML=''; despesaCount=0;
+  g('exibirDespesas').checked=false; g('despesasWrap').style.display='none';
+  g('jurosParcela').value='0';
   limparAssinatura('assinaturaCanvas','sigLabel');
   atualizar();
 }

@@ -806,7 +806,7 @@ body.dark #recibo-preview-simples {
         <!-- PARCELAS -->
         <div class="section-label">Parcelamento
           <label style="display:inline-flex;align-items:center;gap:5px;margin-left:8px;font-size:11px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;cursor:pointer">
-            Juros: <input type="number" id="jurosParcela" value="0" min="0" step="0.1" oninput="atualizar()" style="width:46px;padding:2px 5px;font-size:11px;border-radius:5px;border:1px solid var(--border)">
+            Juros: <input type="number" id="jurosParcela" value="0" min="0" step="0.1" oninput="recalcTodosParcelas();atualizar()" style="width:46px;padding:2px 5px;font-size:11px;border-radius:5px;border:1px solid var(--border)">
             <span style="color:var(--muted)">% a.m.</span>
           </label>
         </div>
@@ -1166,7 +1166,7 @@ function adicionarParcela(){
       <label style="margin:0 0 2px;font-size:10px;color:#ea580c">c/ Juros</label>
       <div class="parcela-total" style="font-size:12px;font-weight:700;color:#ea580c;min-width:72px;line-height:28px">—</div>
     </div>
-    <button class="btn btn-ghost btn-icon btn-sm" onclick="document.getElementById('parcela-${id}').remove();renumParcelas();atualizar()" title="Remover">✕</button>
+    <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.parcela-item').remove();renumParcelas();atualizar()" title="Remover">✕</button>
   `;
   g('parcelas').appendChild(div);
   maskInlineById('parcela-'+id);
@@ -1199,15 +1199,24 @@ function maskInline(el){
   el.value = 'R$ '+v;
 }
 
+function recalcTodosParcelas(){
+  document.querySelectorAll('#parcelas .parcela-item').forEach(p=>{
+    const valorInput = p.querySelector('.parcela-valor');
+    if(valorInput) calcParcelaJuros(valorInput);
+  });
+}
+
 function calcParcelaJuros(valorInput){
-  const wrap = valorInput.closest('.parcela-item');
-  const totalEl = wrap.querySelector('.parcela-total');
-  if(!totalEl) return;
-  const j = parseFloat(g('jurosParcela').value)||0;
-  const v = parseFloat(String(valorInput.value).replace(/[^\d,]/g,'').replace(',','.'));
-  if(!j || isNaN(v)||v===0){ totalEl.textContent='—'; return; }
-  const total = v * (1 + j/100);
-  totalEl.textContent = fmtMoeda(total.toFixed(2).replace('.',','));
+  setTimeout(()=>{
+    const wrap = valorInput.closest('.parcela-item');
+    const totalEl = wrap.querySelector('.parcela-total');
+    if(!totalEl) return;
+    const j = parseFloat(g('jurosParcela').value)||0;
+    const v = parseFloat(String(valorInput.value).replace(/[^\d,]/g,'').replace(',','.'));
+    if(!j || isNaN(v)||v===0){ totalEl.textContent='—'; return; }
+    const total = v * (1 + j/100);
+    totalEl.textContent = fmtMoeda(total.toFixed(2).replace('.',','));
+  },0);
 }
 
 let despesaCount = 0;
@@ -1226,7 +1235,7 @@ function addDespesa(nome){
       <label style="margin:0 0 2px;font-size:10px">Valor</label>
       <input placeholder="R$ 0,00" oninput="maskInline(this);atualizar()" style="padding:5px 8px;font-size:12px">
     </div>
-    <button class="btn btn-ghost btn-icon btn-sm" onclick="document.getElementById('${id}').remove();atualizar()" title="Remover">✕</button>
+    <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.parcela-item').remove();atualizar()" title="Remover">✕</button>
   `;
   g('despesaLista').appendChild(div);
   maskInlineById(id);
@@ -1271,8 +1280,21 @@ function buildReceiptAluguel(){
   const jurosStr = fmtMoeda(jurosAbs.toFixed(2).replace('.',','));
   const multaVal = multaStr;
   const valorExtenso = valorPorExtenso(totalStr);
+  const tipoLabels = {
+    'imóvel':          { label: 'Imóvel',           prep: 'do imóvel',           frase: 'do imóvel acima mencionado' },
+    'apartamento':     { label: 'Apartamento',       prep: 'do apartamento',      frase: 'do apartamento acima mencionado' },
+    'casa':            { label: 'Casa',              prep: 'da casa',             frase: 'da casa acima mencionada' },
+    'sala comercial':  { label: 'Sala Comercial',    prep: 'da sala comercial',   frase: 'da sala comercial acima mencionada' },
+    'loja':            { label: 'Loja',              prep: 'da loja',             frase: 'da loja acima mencionada' },
+    'galpão':          { label: 'Galpão',            prep: 'do galpão',           frase: 'do galpão acima mencionado' },
+    'terreno':         { label: 'Terreno',           prep: 'do terreno',          frase: 'do terreno acima mencionado' },
+    'kitnet':          { label: 'Kitnet / Studio',   prep: 'da kitnet',           frase: 'da kitnet acima mencionada' },
+    'ponto comercial': { label: 'Ponto Comercial',   prep: 'do ponto comercial',  frase: 'do ponto comercial acima mencionado' },
+  };
+  const tipoInfo = tipoLabels[tipo] || { label: 'Imóvel', prep: 'do imóvel', frase: 'do imóvel acima mencionado' };
+  const tipoFrase = tipoInfo.frase;
   const frase = locatario && locador
-    ? `Recebi(emos) de <strong>${locatario}</strong> a quantia de <strong>${totalStr}</strong> (<em>${valorExtenso}</em>), referente ao pagamento do aluguel do ${tipo} acima mencionado, correspondente ao mês de <strong>${g('mes').value} de ${g('ano').value}</strong>, via <strong>${g('forma').value}</strong>. Dou plena quitação pelo valor recebido.`
+    ? `Recebi(emos) de <strong>${locatario}</strong> a quantia de <strong>${totalStr}</strong> (<em>${valorExtenso}</em>), referente ao pagamento do aluguel ${tipoFrase}, correspondente ao mês de <strong>${g('mes').value} de ${g('ano').value}</strong>, via <strong>${g('forma').value}</strong>. Dou plena quitação pelo valor recebido.`
     : '';
 
   // ── parcelas ──
@@ -1309,19 +1331,11 @@ function buildReceiptAluguel(){
       }).filter(Boolean).join('')
     : '';
 
-  // ── total geral ──
-  // Se há parcelas, soma-as (com juros); senão usa valor base (com multa se houver)
-  const parcelaEls = [...document.querySelectorAll('#parcelas .parcela-item')];
-  let totalParcelas = 0;
-  parcelaEls.forEach(p=>{
-    const inputs = p.querySelectorAll('input');
-    const v = parseFloat(String(inputs[0]?.value||'').replace(/[^\d,]/g,'').replace(',','.'));
-    if(!isNaN(v) && v > 0){
-      totalParcelas += jp ? v*(1+jp/100) : v;
-    }
-  });
-  const temParcelas = parcelaEls.length > 0 && totalParcelas > 0;
-  let totalGeral = temParcelas ? totalParcelas : (comMulta ? totalComMulta : (isNaN(valorNum) ? 0 : valorNum));
+  // ── cálculo financeiro ──
+  // valor base = aluguel (+ multa se houver)
+  const valorBase = comMulta ? totalComMulta : (isNaN(valorNum) ? 0 : valorNum);
+
+  // despesas
   const despesaEls = g('exibirDespesas').checked
     ? [...document.querySelectorAll('#despesaLista .parcela-item')] : [];
   let totalDespesas = 0;
@@ -1329,9 +1343,35 @@ function buildReceiptAluguel(){
     const v = parseFloat(String(p.querySelectorAll('input')[1]?.value||'').replace(/[^\d,]/g,'').replace(',','.'));
     if(!isNaN(v)) totalDespesas += v;
   });
-  totalGeral += totalDespesas;
-  const mostrarTotal = temParcelas || totalDespesas > 0 || (despesas && despesas.length > 0);
-  const totalGeralStr = totalGeral > 0 ? fmtMoeda(totalGeral.toFixed(2).replace('.',',')) : '';
+
+  // SUBTOTAL = aluguel + despesas (tudo o que é devido, sem juros de parcelamento)
+  const subTotal = valorBase + totalDespesas;
+
+  // parcelas: soma sem juros e com juros separados
+  const parcelaEls = [...document.querySelectorAll('#parcelas .parcela-item')];
+  let somaParcelasSemJuros = 0;
+  let somaParcelasComJuros = 0;
+  parcelaEls.forEach(p=>{
+    const v = parseFloat(String(p.querySelectorAll('input')[0]?.value||'').replace(/[^\d,]/g,'').replace(',','.'));
+    if(!isNaN(v) && v > 0){
+      somaParcelasSemJuros += v;
+      somaParcelasComJuros += jp ? v*(1+jp/100) : v;
+    }
+  });
+  const temParcelas = parcelaEls.length > 0 && somaParcelasSemJuros > 0;
+  const totalJurosParcela = jp ? somaParcelasComJuros - somaParcelasSemJuros : 0;
+
+  // SALDO DEVEDOR = subtotal - soma das parcelas (sem juros) → o que ainda falta cobrir
+  const saldoDevedor = subTotal - somaParcelasSemJuros;
+
+  // TOTAL GERAL = subtotal + juros de parcelamento (custo final)
+  const totalGeral = subTotal + totalJurosParcela;
+
+  const mostrarFinanceiro = temParcelas || totalDespesas > 0;
+  const subTotalStr      = fmtMoeda(subTotal.toFixed(2).replace('.',','));
+  const totalJurosStr    = totalJurosParcela > 0 ? fmtMoeda(totalJurosParcela.toFixed(2).replace('.',',')) : '';
+  const saldoDevedorStr  = saldoDevedor > 0.005 ? fmtMoeda(saldoDevedor.toFixed(2).replace('.',',')) : null;
+  const totalGeralStr    = totalGeral > 0 ? fmtMoeda(totalGeral.toFixed(2).replace('.',',')) : '';
 
   return `<div class="receipt-inner">
     <div class="receipt-header">
@@ -1358,7 +1398,7 @@ function buildReceiptAluguel(){
         <span style="font-size:11px;color:#6b7a99">${g('cpfLocatario').value||''}</span>
       </div>
       ${endereco ? `<div class="receipt-field full">
-        <label>${tipo.charAt(0).toUpperCase()+tipo.slice(1)}</label>
+        <label>${tipoInfo.label}</label>
         <span>${endereco}${cepVal?' · CEP '+cepVal:''}</span>
       </div>` : ''}
     </div>
@@ -1404,19 +1444,48 @@ function buildReceiptAluguel(){
       </ul>
     </div>` : ''}
 
-    ${parcelas ? `<div class="receipt-section">
-      <div class="receipt-section-title">Parcelamento${jp ? ' · Juros '+jp+'% a.m.' : ''}</div>
-      <div class="receipt-parcelas">${parcelas}</div>
-    </div>` : ''}
+    ${mostrarFinanceiro ? `<div style="border:1px solid #e2e8f4;border-radius:10px;overflow:hidden;margin:14px 0">
 
-    ${despesas ? `<div class="receipt-section">
-      <div class="receipt-section-title">Despesas do Imóvel</div>
-      <div class="receipt-parcelas">${despesas}</div>
-    </div>` : ''}
+      ${despesas ? `<div style="padding:10px 14px;border-bottom:1px solid #e2e8f4">
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#aab4e8;margin-bottom:6px">Despesas do Imóvel</div>
+        ${despesas}
+      </div>` : ''}
 
-    ${mostrarTotal ? `<div style="display:flex;justify-content:space-between;align-items:center;background:#eef2ff;border-radius:8px;padding:10px 16px;margin:8px 0;font-weight:700;font-size:14px">
-      <span style="color:#3b5bdb">Total Geral</span>
-      <span style="color:#3b5bdb;font-size:18px">${totalGeralStr}</span>
+      ${temParcelas ? `<div style="padding:10px 14px;border-bottom:1px solid #e2e8f4">
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#aab4e8;margin-bottom:6px">Parcelamento${jp ? ' · '+jp+'% a.m.' : ''}</div>
+        ${parcelas}
+      </div>` : ''}
+
+      <div style="padding:12px 14px;background:#f8faff;display:flex;flex-direction:column;gap:5px">
+
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7a99">
+          <span>Aluguel${comMulta?' + encargos':''}${despesas?' + despesas':''}</span>
+          <span style="font-weight:600;color:#1a2035">${subTotalStr}</span>
+        </div>
+
+        ${temParcelas ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7a99">
+          <span>Coberto pelas parcelas</span>
+          <span style="font-weight:600;color:#2f9e44">− ${fmtMoeda(somaParcelasSemJuros.toFixed(2).replace('.',','))}</span>
+        </div>` : ''}
+
+        ${totalJurosStr ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:#ea580c">
+          <span>Juros de parcelamento (${jp}% a.m.)</span>
+          <span style="font-weight:600">+ ${totalJurosStr}</span>
+        </div>` : ''}
+
+        <div style="border-top:2px solid #e2e8f4;margin:4px 0"></div>
+
+        ${temParcelas && saldoDevedorStr ? `<div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;font-weight:700;color:#6b7a99">Saldo Devedor</span>
+          <span style="font-size:16px;font-weight:700;color:#e03131">${saldoDevedorStr}</span>
+        </div>` : ''}
+
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+          <span style="font-size:13px;font-weight:700;color:#3b5bdb">Total Geral</span>
+          <span style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#3b5bdb">${totalGeralStr}</span>
+        </div>
+
+      </div>
     </div>` : ''}
 
     ${obs ? `<div class="receipt-obs">${obs.replace(/\n/g,'<br>')}</div>` : ''}

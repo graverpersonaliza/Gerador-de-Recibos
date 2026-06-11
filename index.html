@@ -582,6 +582,69 @@ body.dark #recibo-preview-simples {
 .preview-placeholder .icon { font-size: 40px; opacity: .4 }
 .preview-placeholder p { font-size: 13px; opacity: .6 }
 
+
+/* ── PRO MODAL ── */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(10,14,26,.6);
+  backdrop-filter: blur(4px);
+  z-index: 999;
+  align-items: center;
+  justify-content: center;
+}
+.modal-overlay.open { display: flex }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 28px;
+  width: 480px;
+  max-width: 95vw;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 64px rgba(0,0,0,.25);
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 16px; right: 16px;
+  background: none; border: none;
+  font-size: 20px; cursor: pointer;
+  color: var(--muted);
+  line-height: 1;
+}
+
+.pro-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: linear-gradient(135deg,#f59e0b,#f97316);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 20px;
+  letter-spacing: .04em;
+}
+
+.logo-drop {
+  border: 2px dashed var(--border2);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color .2s, background .2s;
+  background: var(--surface2);
+}
+.logo-drop:hover { border-color: var(--accent); background: var(--accent-light) }
+.logo-drop img { max-height: 70px; max-width: 100%; object-fit: contain; border-radius: 6px }
+
+.receipt-logo { max-height: 54px; max-width: 160px; object-fit: contain }
+
 /* scroll */
 ::-webkit-scrollbar { width: 6px }
 ::-webkit-scrollbar-track { background: transparent }
@@ -598,6 +661,7 @@ body.dark #recibo-preview-simples {
   </div>
   <div class="header-actions">
     <button class="btn btn-ghost btn-sm" onclick="novoRecibo()">＋ Novo</button>
+    <button class="btn btn-ghost btn-sm" id="btnPro" onclick="abrirModalPro()" style="border-color:#f59e0b;color:#f59e0b">⭐ Pro</button>
     <button class="btn btn-ghost btn-icon" id="toggleTheme" title="Alternar tema">🌙</button>
   </div>
 </header>
@@ -1375,7 +1439,8 @@ function buildReceiptAluguel(){
 
   return `<div class="receipt-inner">
     <div class="receipt-header">
-      <div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${proAtivo()&&proReceiptLogo() ? proReceiptLogo() : ''}
         <div class="receipt-title">Recibo de Aluguel</div>
         <div class="receipt-subtitle">${g('mes').value} de ${g('ano').value}</div>
       </div>
@@ -1501,7 +1566,7 @@ function buildReceiptAluguel(){
     </div>
 
     <div class="receipt-footer">
-      <span>Disponibilizado por Graver Personaliza</span>
+      ${proAtivo() ? proReceiptFooter() : '<span>Disponibilizado por Graver Personaliza</span>'}
       <span>${new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'long',year:'numeric'})}</span>
     </div>
   </div>`;
@@ -1528,7 +1593,8 @@ function buildReceiptSimples(){
 
   return `<div class="receipt-inner">
     <div class="receipt-header">
-      <div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        ${proAtivo()&&proReceiptLogo() ? proReceiptLogo() : ''}
         <div class="receipt-title">Recibo</div>
         <div class="receipt-subtitle">Pagamento de Serviço / Produto</div>
       </div>
@@ -1657,7 +1723,185 @@ function salvarHistorico(tipo, nome, valor){
   const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
   hist.push({ tipo, nome, valor, data: new Date().toLocaleDateString('pt-BR'), hora: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) });
   localStorage.setItem('historicoRecibos', JSON.stringify(hist));
-  atualizarContador();
+  
+// ═══════════════════════════════════════
+// PRO SYSTEM
+// ═══════════════════════════════════════
+const PRO_HASHES = [
+  '87eaaeec','8aeab3a5','89eab212','84eaaa33','83eaa8a0',
+  '86eaad59','85eaabc6','90eabd17','8feabb84','82e86876',
+  '83e86a09','80e86550','81e866e3','86e86ec2','87e87055',
+  '84e86b9c','85e86d2f','8ae8750e','8be876a1','1ce5894d',
+  '1be587ba','1ae58627','19e58494','18e58301','17e5816e',
+  '16e57fdb','15e57e48','14e57cb5','13e57b22','16e34144',
+  '17e342d7','18e3446a','19e345fd','12e33af8','13e33c8b',
+  '14e33e1e','15e33fb1','0ee334ac','0fe3363f','10e0f93b',
+  '0fe0f7a8','12e0fc61','11e0face','14e0ff87','13e0fdf4',
+  '16e102ad','15e1011a','08e0eca3','07e0eb10','8adde7b2',
+  '8bdde945','88dde48c','89dde61f','86dde166','87dde2f9',
+  '84ddde40','85dddfd3','92ddf44a','93ddf5dd','84db9fa9',
+  '83db9e16','82db9c83','81db9af0','88dba5f5','87dba462',
+  '86dba2cf','85dba13c','8cdbac41','8bdbaaae','7ed957a0',
+  '7fd95933','80d95ac6','81d95c59','82d95dec','83d95f7f',
+  '84d96112','85d962a5','86d96438','87d965cb','98fe5167',
+  '97fe4fd4','9afe548d','99fe52fa','94fe4b1b','93fe4988',
+  '96fe4e41','95fe4cae','90fe44cf','8ffe433c','92fc095e',
+  '93fc0af1','90fc0638','91fc07cb','96fc0faa','97fc113d',
+  '94fc0c84','95fc0e17','8afbfcc6','8bfbfe59','29164834',
+];
+
+function fnv1a(s){
+  let h=0x811c9dc5;
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}
+  return h.toString(16).padStart(8,'0');
+}
+
+function proAtivo(){ return localStorage.getItem('graver_pro')==='1' }
+
+function abrirModalPro(){
+  document.getElementById('modalPro').classList.add('open');
+  if(proAtivo()){ mostrarProAtivo(); } else { mostrarProLocked(); }
+}
+
+function fecharModalPro(){ document.getElementById('modalPro').classList.remove('open') }
+
+function mostrarProLocked(){
+  g('proLocked').style.display='';
+  g('proUnlocked').style.display='none';
+}
+
+function mostrarProAtivo(){
+  g('proLocked').style.display='none';
+  g('proUnlocked').style.display='';
+  const cfg = getProConfig();
+  g('proNome').value = cfg.nome||'';
+  g('proTel').value  = cfg.tel||'';
+  g('proSite').value = cfg.site||'';
+  const logo = localStorage.getItem('graver_logo');
+  if(logo){
+    const img = new Image();
+    img.onload = () => mostrarLogoPreview(logo, img.naturalWidth, img.naturalHeight);
+    img.src = logo;
+  } else {
+    g('logoPreviewWrap').style.display='none';
+    g('logoPlaceholder').style.display='';
+    g('btnRemoverLogo').style.display='none';
+  }
+}
+
+function ativarPro(){
+  const code = g('codigoProInput').value.trim().toUpperCase();
+  if(!PRO_HASHES.includes(fnv1a(code))){
+    g('codigoErro').style.display='block'; return;
+  }
+  g('codigoErro').style.display='none';
+  localStorage.setItem('graver_pro','1');
+  localStorage.setItem('graver_code', code);
+  atualizarBtnPro();
+  mostrarProAtivo();
+  atualizar(); atualizarSimples();
+}
+
+function desativarPro(){
+  if(!confirm('Desativar a versão Pro? Os dados de personalização serão removidos.')) return;
+  localStorage.removeItem('graver_pro');
+  localStorage.removeItem('graver_code');
+  localStorage.removeItem('graver_logo');
+  localStorage.removeItem('graver_brand');
+  atualizarBtnPro();
+  fecharModalPro();
+  atualizar(); atualizarSimples();
+}
+
+function atualizarBtnPro(){
+  const btn = g('btnPro');
+  if(proAtivo()){
+    btn.innerHTML='⭐ Pro';
+    btn.style.background='linear-gradient(135deg,#f59e0b,#f97316)';
+    btn.style.color='#fff';
+    btn.style.borderColor='transparent';
+  } else {
+    btn.innerHTML='⭐ Pro';
+    btn.style.background='';
+    btn.style.color='#f59e0b';
+    btn.style.borderColor='#f59e0b';
+  }
+}
+
+function getProConfig(){
+  try{ return JSON.parse(localStorage.getItem('graver_brand')||'{}'); }catch(e){ return {}; }
+}
+
+function salvarProConfig(){
+  const cfg = { nome:g('proNome').value, tel:g('proTel').value, site:g('proSite').value };
+  localStorage.setItem('graver_brand', JSON.stringify(cfg));
+}
+
+function carregarLogo(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const src = e.target.result;
+    // Check dimensions before saving
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight;
+      localStorage.setItem('graver_logo', src);
+      mostrarLogoPreview(src, w, h);
+      atualizar(); atualizarSimples();
+    };
+    img.src = src;
+  };
+  reader.readAsDataURL(file);
+}
+
+function mostrarLogoPreview(src, w, h){
+  g('logoPreview').src = src;
+  g('logoPreviewWrap').style.display='block';
+  g('logoPlaceholder').style.display='none';
+  g('btnRemoverLogo').style.display='';
+  if(w && h){
+    const ratio = (w/h).toFixed(1);
+    const ok = w/h >= 2;
+    g('logoDimensoes').innerHTML = `${w} × ${h} px · Proporção ${ratio}:1 `
+      + (ok ? '<span style="color:#2f9e44">✓ Boa</span>' : '<span style="color:#e03131">⚠ Muito alta — prefira formato horizontal</span>');
+  }
+}
+
+function removerLogo(){
+  localStorage.removeItem('graver_logo');
+  g('logoPreviewWrap').style.display='none';
+  g('logoPreview').src='';
+  g('logoPlaceholder').style.display='';
+  g('btnRemoverLogo').style.display='none';
+  g('logoInput').value='';
+  atualizar(); atualizarSimples();
+}
+
+function proReceiptFooter(){
+  const cfg = getProConfig();
+  const nome  = cfg.nome  || '';
+  const tel   = cfg.tel   || '';
+  const site  = cfg.site  || '';
+  const parts = [nome, tel, site].filter(Boolean).join(' · ');
+  return `<span>${parts||'&nbsp;'}</span><span style="color:#aab4e8">Powered by Graver</span>`;
+}
+
+function proReceiptLogo(){
+  const logo = localStorage.getItem('graver_logo');
+  return logo ? `<img src="${logo}" style="max-height:54px;max-width:200px;width:auto;height:auto;object-fit:contain;display:block">` : '';
+}
+
+// close modal on overlay click
+document.getElementById('modalPro').addEventListener('click', e => {
+  if(e.target === document.getElementById('modalPro')) fecharModalPro();
+});
+
+// init
+window.addEventListener('load', ()=>{ atualizarBtnPro(); }, true);
+
+atualizarContador();
 }
 
 function carregarHistorico(){
@@ -1683,7 +1927,149 @@ function carregarHistorico(){
     </div>
   `).join('');
 
-  atualizarContador();
+  
+// ═══════════════════════════════════════
+// PRO SYSTEM
+// ═══════════════════════════════════════
+const PRO_HASHES = [
+  '87eaaeec','8aeab3a5','89eab212','84eaaa33','83eaa8a0',
+  '86eaad59','85eaabc6','90eabd17','8feabb84','82e86876',
+  '83e86a09','80e86550','81e866e3','86e86ec2','87e87055',
+  '84e86b9c','85e86d2f','8ae8750e','8be876a1','1ce5894d',
+  '1be587ba','1ae58627','19e58494','18e58301','17e5816e'
+];
+
+function fnv1a(s){
+  let h=0x811c9dc5;
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}
+  return h.toString(16).padStart(8,'0');
+}
+
+function proAtivo(){ return localStorage.getItem('graver_pro')==='1' }
+
+function abrirModalPro(){
+  document.getElementById('modalPro').classList.add('open');
+  if(proAtivo()){ mostrarProAtivo(); } else { mostrarProLocked(); }
+}
+
+function fecharModalPro(){ document.getElementById('modalPro').classList.remove('open') }
+
+function mostrarProLocked(){
+  g('proLocked').style.display='';
+  g('proUnlocked').style.display='none';
+}
+
+function mostrarProAtivo(){
+  g('proLocked').style.display='none';
+  g('proUnlocked').style.display='';
+  const cfg = getProConfig();
+  g('proNome').value = cfg.nome||'';
+  g('proTel').value  = cfg.tel||'';
+  g('proSite').value = cfg.site||'';
+  const logo = localStorage.getItem('graver_logo');
+  if(logo){ mostrarLogoPreview(logo); } else { g('logoPreview').style.display='none'; g('logoPlaceholder').style.display=''; g('btnRemoverLogo').style.display='none'; }
+}
+
+function ativarPro(){
+  const code = g('codigoProInput').value.trim().toUpperCase();
+  if(!PRO_HASHES.includes(fnv1a(code))){
+    g('codigoErro').style.display='block'; return;
+  }
+  g('codigoErro').style.display='none';
+  localStorage.setItem('graver_pro','1');
+  localStorage.setItem('graver_code', code);
+  atualizarBtnPro();
+  mostrarProAtivo();
+  atualizar(); atualizarSimples();
+}
+
+function desativarPro(){
+  if(!confirm('Desativar a versão Pro? Os dados de personalização serão removidos.')) return;
+  localStorage.removeItem('graver_pro');
+  localStorage.removeItem('graver_code');
+  localStorage.removeItem('graver_logo');
+  localStorage.removeItem('graver_brand');
+  atualizarBtnPro();
+  fecharModalPro();
+  atualizar(); atualizarSimples();
+}
+
+function atualizarBtnPro(){
+  const btn = g('btnPro');
+  if(proAtivo()){
+    btn.innerHTML='⭐ Pro';
+    btn.style.background='linear-gradient(135deg,#f59e0b,#f97316)';
+    btn.style.color='#fff';
+    btn.style.borderColor='transparent';
+  } else {
+    btn.innerHTML='⭐ Pro';
+    btn.style.background='';
+    btn.style.color='#f59e0b';
+    btn.style.borderColor='#f59e0b';
+  }
+}
+
+function getProConfig(){
+  try{ return JSON.parse(localStorage.getItem('graver_brand')||'{}'); }catch(e){ return {}; }
+}
+
+function salvarProConfig(){
+  const cfg = { nome:g('proNome').value, tel:g('proTel').value, site:g('proSite').value };
+  localStorage.setItem('graver_brand', JSON.stringify(cfg));
+}
+
+function carregarLogo(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    localStorage.setItem('graver_logo', e.target.result);
+    mostrarLogoPreview(e.target.result);
+    atualizar(); atualizarSimples();
+  };
+  reader.readAsDataURL(file);
+}
+
+function mostrarLogoPreview(src){
+  g('logoPreview').src = src;
+  g('logoPreview').style.display='block';
+  g('logoPlaceholder').style.display='none';
+  g('btnRemoverLogo').style.display='';
+}
+
+function removerLogo(){
+  localStorage.removeItem('graver_logo');
+  g('logoPreview').style.display='none';
+  g('logoPreview').src='';
+  g('logoPlaceholder').style.display='';
+  g('btnRemoverLogo').style.display='none';
+  g('logoInput').value='';
+  atualizar(); atualizarSimples();
+}
+
+function proReceiptFooter(){
+  const cfg = getProConfig();
+  const nome  = cfg.nome  || '';
+  const tel   = cfg.tel   || '';
+  const site  = cfg.site  || '';
+  const parts = [nome, tel, site].filter(Boolean).join(' · ');
+  return `<span>${parts||'&nbsp;'}</span><span style="color:#aab4e8">Powered by Graver</span>`;
+}
+
+function proReceiptLogo(){
+  const logo = localStorage.getItem('graver_logo');
+  return logo ? `<img src="${logo}" class="receipt-logo" style="max-height:54px;max-width:160px;object-fit:contain;display:block">` : '';
+}
+
+// close modal on overlay click
+document.getElementById('modalPro').addEventListener('click', e => {
+  if(e.target === document.getElementById('modalPro')) fecharModalPro();
+});
+
+// init
+window.addEventListener('load', ()=>{ atualizarBtnPro(); }, true);
+
+atualizarContador();
 }
 
 function atualizarContador(){
@@ -1732,9 +2118,231 @@ function novoRecibo(){
   else limparAluguel();
 }
 
+
+// ═══════════════════════════════════════
+// PRO SYSTEM
+// ═══════════════════════════════════════
+const PRO_HASHES = [
+  '87eaaeec','8aeab3a5','89eab212','84eaaa33','83eaa8a0',
+  '86eaad59','85eaabc6','90eabd17','8feabb84','82e86876',
+  '83e86a09','80e86550','81e866e3','86e86ec2','87e87055',
+  '84e86b9c','85e86d2f','8ae8750e','8be876a1','1ce5894d',
+  '1be587ba','1ae58627','19e58494','18e58301','17e5816e'
+];
+
+function fnv1a(s){
+  let h=0x811c9dc5;
+  for(let i=0;i<s.length;i++){h^=s.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}
+  return h.toString(16).padStart(8,'0');
+}
+
+function proAtivo(){ return localStorage.getItem('graver_pro')==='1' }
+
+function abrirModalPro(){
+  document.getElementById('modalPro').classList.add('open');
+  if(proAtivo()){ mostrarProAtivo(); } else { mostrarProLocked(); }
+}
+
+function fecharModalPro(){ document.getElementById('modalPro').classList.remove('open') }
+
+function mostrarProLocked(){
+  g('proLocked').style.display='';
+  g('proUnlocked').style.display='none';
+}
+
+function mostrarProAtivo(){
+  g('proLocked').style.display='none';
+  g('proUnlocked').style.display='';
+  const cfg = getProConfig();
+  g('proNome').value = cfg.nome||'';
+  g('proTel').value  = cfg.tel||'';
+  g('proSite').value = cfg.site||'';
+  const logo = localStorage.getItem('graver_logo');
+  if(logo){ mostrarLogoPreview(logo); } else { g('logoPreview').style.display='none'; g('logoPlaceholder').style.display=''; g('btnRemoverLogo').style.display='none'; }
+}
+
+function ativarPro(){
+  const code = g('codigoProInput').value.trim().toUpperCase();
+  if(!PRO_HASHES.includes(fnv1a(code))){
+    g('codigoErro').style.display='block'; return;
+  }
+  g('codigoErro').style.display='none';
+  localStorage.setItem('graver_pro','1');
+  localStorage.setItem('graver_code', code);
+  atualizarBtnPro();
+  mostrarProAtivo();
+  atualizar(); atualizarSimples();
+}
+
+function desativarPro(){
+  if(!confirm('Desativar a versão Pro? Os dados de personalização serão removidos.')) return;
+  localStorage.removeItem('graver_pro');
+  localStorage.removeItem('graver_code');
+  localStorage.removeItem('graver_logo');
+  localStorage.removeItem('graver_brand');
+  atualizarBtnPro();
+  fecharModalPro();
+  atualizar(); atualizarSimples();
+}
+
+function atualizarBtnPro(){
+  const btn = g('btnPro');
+  if(proAtivo()){
+    btn.innerHTML='⭐ Pro';
+    btn.style.background='linear-gradient(135deg,#f59e0b,#f97316)';
+    btn.style.color='#fff';
+    btn.style.borderColor='transparent';
+  } else {
+    btn.innerHTML='⭐ Pro';
+    btn.style.background='';
+    btn.style.color='#f59e0b';
+    btn.style.borderColor='#f59e0b';
+  }
+}
+
+function getProConfig(){
+  try{ return JSON.parse(localStorage.getItem('graver_brand')||'{}'); }catch(e){ return {}; }
+}
+
+function salvarProConfig(){
+  const cfg = { nome:g('proNome').value, tel:g('proTel').value, site:g('proSite').value };
+  localStorage.setItem('graver_brand', JSON.stringify(cfg));
+}
+
+function carregarLogo(input){
+  const file = input.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    localStorage.setItem('graver_logo', e.target.result);
+    mostrarLogoPreview(e.target.result);
+    atualizar(); atualizarSimples();
+  };
+  reader.readAsDataURL(file);
+}
+
+function mostrarLogoPreview(src){
+  g('logoPreview').src = src;
+  g('logoPreview').style.display='block';
+  g('logoPlaceholder').style.display='none';
+  g('btnRemoverLogo').style.display='';
+}
+
+function removerLogo(){
+  localStorage.removeItem('graver_logo');
+  g('logoPreview').style.display='none';
+  g('logoPreview').src='';
+  g('logoPlaceholder').style.display='';
+  g('btnRemoverLogo').style.display='none';
+  g('logoInput').value='';
+  atualizar(); atualizarSimples();
+}
+
+function proReceiptFooter(){
+  const cfg = getProConfig();
+  const nome  = cfg.nome  || '';
+  const tel   = cfg.tel   || '';
+  const site  = cfg.site  || '';
+  const parts = [nome, tel, site].filter(Boolean).join(' · ');
+  return `<span>${parts||'&nbsp;'}</span><span style="color:#aab4e8">Powered by Graver</span>`;
+}
+
+function proReceiptLogo(){
+  const logo = localStorage.getItem('graver_logo');
+  return logo ? `<img src="${logo}" class="receipt-logo" style="max-height:54px;max-width:160px;object-fit:contain;display:block">` : '';
+}
+
+// close modal on overlay click
+document.getElementById('modalPro').addEventListener('click', e => {
+  if(e.target === document.getElementById('modalPro')) fecharModalPro();
+});
+
+// init
+window.addEventListener('load', ()=>{ atualizarBtnPro(); }, true);
+
 atualizarContador();
 </script>
 
+
+<!-- PRO MODAL -->
+<div class="modal-overlay" id="modalPro">
+  <div class="modal">
+    <button class="modal-close" onclick="fecharModalPro()">✕</button>
+
+    <!-- NOT ACTIVATED -->
+    <div id="proLocked">
+      <div style="text-align:center;margin-bottom:20px">
+        <div style="font-size:36px;margin-bottom:8px">🔐</div>
+        <div style="font-size:18px;font-weight:700;margin-bottom:6px">Versão Pro</div>
+        <div style="font-size:13px;color:var(--muted);line-height:1.6">
+          Personalize o recibo com a logo e dados da sua empresa.<br>
+          Adquira um código com a <strong>Graver Personaliza</strong>.
+        </div>
+      </div>
+      <div class="field">
+        <label>Código de ativação</label>
+        <input id="codigoProInput" placeholder="GRPRO-0000" oninput="this.value=this.value.toUpperCase()"
+          style="text-align:center;font-size:16px;font-weight:700;letter-spacing:.1em">
+        <div id="codigoErro" style="color:#e03131;font-size:11px;margin-top:4px;display:none">Código inválido. Verifique e tente novamente.</div>
+      </div>
+      <button class="btn btn-primary" style="width:100%;justify-content:center;margin-top:4px" onclick="ativarPro()">Ativar</button>
+      <div style="text-align:center;margin-top:16px;font-size:12px;color:var(--muted)">
+        Adquira seu código via
+        <a href="https://wa.me/5554996702690" target="_blank" style="color:#25d366;font-weight:600">WhatsApp</a> ·
+        <a href="https://instagram.com/lojagraverpersonaliza" target="_blank" style="color:#e1306c;font-weight:600">Instagram</a>
+      </div>
+    </div>
+
+    <!-- ACTIVATED -->
+    <div id="proUnlocked" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <div>
+          <span class="pro-badge">⭐ PRO ATIVO</span>
+          <div style="font-size:13px;color:var(--muted);margin-top:6px">Personalize seu recibo abaixo</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="desativarPro()" style="color:#e03131;border-color:#fca5a5">Desativar</button>
+      </div>
+
+      <div class="section-label">Logo da empresa</div>
+      <div class="logo-drop" id="logoDrop" onclick="document.getElementById('logoInput').click()">
+        <div id="logoPlaceholder">
+          <div style="font-size:28px;margin-bottom:6px">🖼️</div>
+          <div style="font-size:12px;color:var(--muted)">Clique para enviar a logo</div>
+          <div style="font-size:10px;color:var(--muted);margin-top:4px;line-height:1.6">
+            PNG ou JPG · Fundo transparente recomendado<br>
+            <strong>Tamanho ideal: 400 × 120 px</strong> (proporção ~3:1)<br>
+            Logos quadradas ou muito altas podem aparecer achatadas
+          </div>
+        </div>
+        <div id="logoPreviewWrap" style="display:none;text-align:center">
+          <img id="logoPreview" style="max-height:60px;max-width:220px;width:auto;height:auto;object-fit:contain;display:inline-block">
+          <div id="logoDimensoes" style="font-size:10px;color:var(--muted);margin-top:4px"></div>
+        </div>
+      </div>
+      <input type="file" id="logoInput" accept="image/*" style="display:none" onchange="carregarLogo(this)">
+      <button class="btn btn-ghost btn-sm" id="btnRemoverLogo" style="display:none;margin-top:6px" onclick="removerLogo()">🗑 Remover logo</button>
+
+      <div class="section-label" style="margin-top:14px">Dados da empresa</div>
+      <div class="field">
+        <label>Nome da empresa</label>
+        <input id="proNome" placeholder="Ex: Imobiliária Silva" oninput="salvarProConfig();atualizar();atualizarSimples()">
+      </div>
+      <div class="row">
+        <div class="field">
+          <label>Telefone / WhatsApp</label>
+          <input id="proTel" placeholder="(00) 00000-0000" oninput="salvarProConfig();atualizar();atualizarSimples()">
+        </div>
+        <div class="field">
+          <label>Instagram / Site</label>
+          <input id="proSite" placeholder="@empresa" oninput="salvarProConfig();atualizar();atualizarSimples()">
+        </div>
+      </div>
+      <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:16px">
+        <button class="btn btn-primary" style="width:100%;justify-content:center" onclick="salvarProConfig();fecharModalPro();atualizar();atualizarSimples()">✓ Salvar e Fechar</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <footer style="text-align:center;padding:18px 20px;margin-top:12px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted);font-family:'Figtree',sans-serif;line-height:1.8">
   Disponibilizado por <strong style="color:var(--accent)">Graver Personaliza</strong> &mdash; Gravação e Corte a Laser

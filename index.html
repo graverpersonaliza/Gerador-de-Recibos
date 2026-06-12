@@ -969,6 +969,16 @@ body.dark #recibo-preview-simples {
           <textarea id="referenteSimples" placeholder="Descreva o serviço ou produto..." oninput="atualizarSimples()"></textarea>
         </div>
 
+        <!-- PARCELAS SIMPLES -->
+        <div class="section-label">Parcelamento
+          <label style="display:inline-flex;align-items:center;gap:5px;margin-left:8px;font-size:11px;font-weight:600;color:var(--muted);text-transform:none;letter-spacing:0;cursor:pointer">
+            Juros: <input type="number" id="jurosParcelaSimples" value="0" min="0" step="0.1" oninput="recalcParcelasSimples();atualizarSimples()" style="width:46px;padding:2px 5px;font-size:11px;border-radius:5px;border:1px solid var(--border)">
+            <span style="color:var(--muted)">% a.m.</span>
+          </label>
+        </div>
+        <div id="parcelasSimples"></div>
+        <button class="btn btn-ghost btn-sm" onclick="adicionarParcelaSimples()" style="width:100%;justify-content:center;margin-bottom:10px">＋ Adicionar parcela</button>
+
         <div class="section-label">Assinatura</div>
         <div class="sig-wrap">
           <canvas id="assinaturaSimples" height="90"></canvas>
@@ -1590,12 +1600,48 @@ function buildReceiptSimples(){
   const canvas = g('assinaturaSimples');
   const sigData = canvas.toDataURL();
   const hasSig = isSigned('assinaturaSimples');
-  const valorStr = g('valorSimples').value||'R$ 0,00';
-  const valorExtenso = valorPorExtenso(valorStr);
   const formaS = g('formaSimples').value;
   const referente = g('referenteSimples').value.trim();
+
+  // parcelas simples
+  const jpS = parseFloat(g('jurosParcelaSimples').value)||0;
+  const parcelaElsS = [...document.querySelectorAll('#parcelasSimples .parcela-item')];
+  let somaSemJurosS = 0, somaComJurosS = 0;
+  parcelaElsS.forEach(p=>{
+    const v = parseFloat(String(p.querySelectorAll('input')[0]?.value||'').replace(/[^\d,]/g,'').replace(',','.'));
+    if(!isNaN(v)&&v>0){ somaSemJurosS+=v; somaComJurosS += jpS ? v*(1+jpS/100) : v; }
+  });
+  const temParcelasS = parcelaElsS.length > 0 && somaSemJurosS > 0;
+  const jurosAbsS = somaComJurosS - somaSemJurosS;
+
+  // valor base e total
+  const valorStr = g('valorSimples').value||'R$ 0,00';
+  const valorNumS = parseFloat(String(valorStr).replace(/[^\d,]/g,'').replace(',','.'));
+  const totalS = temParcelasS ? somaComJurosS : (isNaN(valorNumS)?0:valorNumS);
+  const totalStrS = temParcelasS ? fmtMoeda(somaComJurosS.toFixed(2).replace('.',',')) : valorStr;
+  const saldoS = isNaN(valorNumS) ? 0 : valorNumS - somaSemJurosS;
+  const valorExtenso = valorPorExtenso(totalStrS);
+
+  const parcelasHTMLS = parcelaElsS.map((p,i)=>{
+    const inputs = p.querySelectorAll('input');
+    const v = inputs[0]?.value||'';
+    const d = fmtData(inputs[1]?.value||'');
+    if(!v&&!d) return '';
+    const vNum = parseFloat(String(v).replace(/[^\d,]/g,'').replace(',','.'));
+    const vCom = jpS&&!isNaN(vNum) ? vNum*(1+jpS/100) : null;
+    return `<div class="receipt-parcela-row">
+      <span><strong>Parcela ${i+1}</strong></span>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:1px">
+        ${vCom ? `<span style="font-size:11px;color:#6b7a99;text-decoration:line-through">${fmtMoeda(v)}</span>
+        <span style="font-weight:700;color:#ea580c">${fmtMoeda(vCom.toFixed(2).replace('.',','))} <span style="font-size:10px">(+${jpS}%)</span></span>`
+        : `<span>${fmtMoeda(v)}</span>`}
+      </div>
+      <span style="color:#6b7a99;font-size:12px">${d}</span>
+    </div>`;
+  }).join('');
+
   const frase = emissor && pagador
-    ? `Recebi(emos) de <strong>${pagador}</strong> a quantia de <strong>${valorStr}</strong> (<em>${valorExtenso}</em>)${referente ? ', referente a: <em>'+referente.replace(/\n/g,', ')+'</em>' : ''}, via <strong>${formaS}</strong>. Dou plena quitação pelo valor recebido.`
+    ? `Recebi(emos) de <strong>${pagador}</strong> a quantia de <strong>${totalStrS}</strong> (<em>${valorExtenso}</em>)${referente ? ', referente a: <em>'+referente.replace(/\n/g,', ')+'</em>' : ''}, via <strong>${formaS}</strong>. Dou plena quitação pelo valor recebido.`
     : '';
 
   return `<div class="receipt-inner">
@@ -1641,6 +1687,36 @@ ${(()=>{
     </div>
 
     ${frase ? `<div style="background:#f0f4ff;border-left:3px solid #3b5bdb;border-radius:0 8px 8px 0;padding:12px 16px;font-size:13px;line-height:1.7;color:#1a2035;margin:14px 0">${frase}</div>` : ''}
+
+    ${temParcelasS ? `<div style="border:1px solid #e2e8f4;border-radius:10px;overflow:hidden;margin:14px 0">
+      <div style="padding:10px 14px;border-bottom:1px solid #e2e8f4">
+        <div style="font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:#aab4e8;margin-bottom:6px">Parcelamento${jpS?' · '+jpS+'% a.m.':''}</div>
+        ${parcelasHTMLS}
+      </div>
+      <div style="padding:12px 14px;background:#f8faff;display:flex;flex-direction:column;gap:5px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7a99">
+          <span>Valor base</span>
+          <span style="font-weight:600;color:#1a2035">${valorStr}</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7a99">
+          <span>Coberto pelas parcelas</span>
+          <span style="font-weight:600;color:#2f9e44">− ${fmtMoeda(somaSemJurosS.toFixed(2).replace('.',','))}</span>
+        </div>
+        ${jurosAbsS>0 ? `<div style="display:flex;justify-content:space-between;font-size:12px;color:#ea580c">
+          <span>Juros (${jpS}% a.m.)</span>
+          <span style="font-weight:600">+ ${fmtMoeda(jurosAbsS.toFixed(2).replace('.',','))}</span>
+        </div>` : ''}
+        <div style="border-top:2px solid #e2e8f4;margin:4px 0"></div>
+        ${saldoS>0.005 ? `<div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:12px;font-weight:700;color:#6b7a99">Saldo Devedor</span>
+          <span style="font-size:16px;font-weight:700;color:#e03131">${fmtMoeda(saldoS.toFixed(2).replace('.',','))}</span>
+        </div>` : ''}
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-top:2px">
+          <span style="font-size:13px;font-weight:700;color:#3b5bdb">Total Geral</span>
+          <span style="font-family:'Playfair Display',serif;font-size:22px;font-weight:700;color:#3b5bdb">${totalStrS}</span>
+        </div>
+      </div>
+    </div>` : ''}
 
     <div class="receipt-sig">
       ${hasSig ? `<div class="receipt-sig-box">
@@ -1798,10 +1874,66 @@ function limparAluguel(){
   atualizar();
 }
 
+let parcelaCountSimples = 0;
+
+function adicionarParcelaSimples(){
+  parcelaCountSimples++;
+  const id = parcelaCountSimples;
+  const div = document.createElement('div');
+  div.className = 'parcela-item';
+  div.id = 'ps-'+id;
+  div.innerHTML = `
+    <span class="parcela-num">#${id}</span>
+    <div>
+      <label style="margin:0 0 2px;font-size:10px">Valor</label>
+      <input class="parcela-valor" placeholder="R$ 0,00" oninput="maskInline(this);calcParcelaJurosSimples(this);atualizarSimples()" style="padding:5px 8px;font-size:12px">
+    </div>
+    <div>
+      <label style="margin:0 0 2px;font-size:10px">Data</label>
+      <input type="date" oninput="atualizarSimples()" style="padding:5px 8px;font-size:12px">
+    </div>
+    <div style="flex:0 0 auto;text-align:center">
+      <label style="margin:0 0 2px;font-size:10px;color:#ea580c">c/ Juros</label>
+      <div class="parcela-total" style="font-size:12px;font-weight:700;color:#ea580c;min-width:72px;line-height:28px">—</div>
+    </div>
+    <button class="btn btn-ghost btn-icon btn-sm" onclick="this.closest('.parcela-item').remove();renumParcelasSimples();atualizarSimples()" title="Remover">✕</button>
+  `;
+  g('parcelasSimples').appendChild(div);
+  maskInlineById('ps-'+id);
+}
+
+function renumParcelasSimples(){
+  document.querySelectorAll('#parcelasSimples .parcela-item').forEach((el,i)=>{
+    const num = el.querySelector('.parcela-num');
+    if(num) num.textContent = '#'+(i+1);
+  });
+}
+
+function calcParcelaJurosSimples(valorInput){
+  setTimeout(()=>{
+    const wrap = valorInput.closest('.parcela-item');
+    const totalEl = wrap.querySelector('.parcela-total');
+    if(!totalEl) return;
+    const j = parseFloat(g('jurosParcelaSimples').value)||0;
+    const v = parseFloat(String(valorInput.value).replace(/[^\d,]/g,'').replace(',','.'));
+    if(!j || isNaN(v)||v===0){ totalEl.textContent='—'; return; }
+    totalEl.textContent = fmtMoeda((v*(1+j/100)).toFixed(2).replace('.',','));
+  },0);
+}
+
+function recalcParcelasSimples(){
+  document.querySelectorAll('#parcelasSimples .parcela-item').forEach(p=>{
+    const vi = p.querySelector('.parcela-valor');
+    if(vi) calcParcelaJurosSimples(vi);
+  });
+}
+
 function limparSimples(){
   ['emissor','cpfEmissor','pagador','cpfPagador','valorSimples','referenteSimples'].forEach(id=>g(id).value='');
   g('formaSimples').value='Pix';
   g('dataSimples').value = new Date().toISOString().split('T')[0];
+  g('jurosParcelaSimples').value='0';
+  g('parcelasSimples').innerHTML=''; parcelaCountSimples=0;
   limparAssinatura('assinaturaSimples','sigLabelSimples');
   atualizarSimples();
 }

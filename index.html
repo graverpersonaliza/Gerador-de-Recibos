@@ -1013,7 +1013,10 @@ body.dark #recibo-preview-simples {
   <div class="card" style="max-width:760px;margin:0 auto;width:100%">
     <div class="card-header">
       <span class="card-title">🕘 Histórico de Recibos</span>
-      <button class="btn btn-danger btn-sm" onclick="limparHistorico()">🗑 Limpar</button>
+      <button class="btn btn-danger btn-sm" onclick="limparHistorico()">🗑 Limpar tudo</button>
+    </div>
+    <div id="storageWarn" style="display:none;background:#fff8f0;border-bottom:1px solid #fed7aa;padding:10px 16px;font-size:12px;color:#92400e">
+      ⚠️ Armazenamento quase cheio. Exclua recibos antigos para liberar espaço.
     </div>
     <div id="historicoLista"></div>
   </div>
@@ -1775,11 +1778,12 @@ async function gerarPDF(previewId, filename, tipo){
     pdf.addImage(img,'PNG',10,10,w,h);
     pdf.save(filename);
 
-    // salvar histórico
+    // salvar histórico com snapshot do recibo
+    const snapshot = el.innerHTML;
     if(tipo==='aluguel'){
-      salvarHistorico('Aluguel', `${g('locador').value} → ${g('locatario').value}`, g('valor').value);
+      salvarHistorico('Aluguel', `${g('locador').value} → ${g('locatario').value}`, g('valor').value, snapshot);
     } else {
-      salvarHistorico('Simples', `${g('emissor').value} → ${g('pagador').value}`, g('valorSimples').value);
+      salvarHistorico('Simples', `${g('emissor').value} → ${g('pagador').value}`, g('valorSimples').value, snapshot);
     }
     proximoNum();
   } catch(e){ alert('Erro ao gerar PDF: '+e.message); }
@@ -1806,13 +1810,61 @@ function imprimirRecibo(previewId){
 // ═══════════════════════════════════════
 function salvarHistorico(tipo, nome, valor){
   const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
-  hist.push({ tipo, nome, valor, data: new Date().toLocaleDateString('pt-BR'), hora: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) });
+  const id = Date.now();
+  hist.push({ id, tipo, nome, valor, data: new Date().toLocaleDateString('pt-BR'), hora: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) });
   localStorage.setItem('historicoRecibos', JSON.stringify(hist));
-  
-// ═══════════════════════════════════════
-// PRO SYSTEM
-// ═══════════════════════════════════════
-atualizarContador();
+  // save snapshot separately to avoid hitting localStorage size limit
+  try { localStorage.setItem('recibo_snap_'+id, snapshot||''); } catch(e){}
+  atualizarContador();
+}
+
+function visualizarRecibo(sid){
+  const snap = localStorage.getItem(sid);
+  if(!snap){ alert('Snapshot não encontrado.'); return; }
+  g('snapReceiptWrap').innerHTML = snap;
+  g('btnDownloadSnap').onclick = ()=>baixarReciboHistorico(sid);
+  document.getElementById('modalSnapshot').classList.add('open');
+}
+
+function fecharSnapshot(){
+  document.getElementById('modalSnapshot').classList.remove('open');
+  g('snapReceiptWrap').innerHTML='';
+}
+
+document.getElementById('modalSnapshot').addEventListener('click', e=>{
+  if(e.target===document.getElementById('modalSnapshot')) fecharSnapshot();
+});
+
+async function baixarReciboHistorico(sid, tipo){
+  const snap = localStorage.getItem(sid);
+  if(!snap){ alert('Snapshot não encontrado.'); return; }
+  // render off-screen
+  const wrap = document.createElement('div');
+  wrap.style.cssText='position:fixed;left:-9999px;top:0;background:#fff;width:800px;font-family:Figtree,sans-serif';
+  wrap.innerHTML = snap;
+  document.body.appendChild(wrap);
+  try{
+    const canvas = await html2canvas(wrap,{scale:3,useCORS:true,backgroundColor:'#ffffff'});
+    const img = canvas.toDataURL('image/png');
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF('p','mm','a4');
+    const w=190, h=canvas.height*w/canvas.width;
+    pdf.addImage(img,'PNG',10,10,w,h);
+    pdf.save(`recibo-${tipo||'historico'}.pdf`);
+  } catch(e){ alert('Erro ao gerar PDF: '+e.message); }
+  finally{ document.body.removeChild(wrap); }
+}
+
+function atualizarContador(){
+  const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
+  const el = g('hist-count');
+  el.textContent = hist.length || '';
+  // storage usage warning
+  let total = 0;
+  for(let k in localStorage){ try{ total += localStorage[k].length; }catch(e){} }
+  const pct = Math.round(total/51200*100); // ~5MB in KB*10
+  const warn = g('storageWarn');
+  if(warn) warn.style.display = pct>70 ? '' : 'none';
 }
 
 function carregarHistorico(){
@@ -1827,19 +1879,25 @@ function carregarHistorico(){
     return;
   }
 
-  lista.innerHTML = [...hist].reverse().map((item,i)=>`
-    <div class="hist-item">
-      <div>
+  lista.innerHTML = [...hist].reverse().map((item,i)=>{
+    const hasSnap = item.snapshotId && localStorage.getItem(item.snapshotId);
+    return `<div class="hist-item">
+      <div style="flex:1;min-width:0">
         <span class="hist-badge ${item.tipo.toLowerCase()}">${item.tipo}</span>
         <div class="hist-nome">${item.nome||'—'}</div>
         <div class="hist-meta">${item.data} às ${item.hora||''}</div>
       </div>
-      <div class="hist-valor">${fmtMoeda(item.valor)}</div>
-    </div>
-  `).join('');
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="hist-valor">${fmtMoeda(item.valor)}</div>
+        ${hasSnap ? `
+          <button class="btn btn-ghost btn-sm" onclick="visualizarRecibo('${item.snapshotId}')" title="Visualizar">👁</button>
+          <button class="btn btn-primary btn-sm" onclick="baixarReciboHistorico('${item.snapshotId}','${item.tipo}')" title="Baixar PDF">⬇</button>
+        ` : `<span style="font-size:10px;color:var(--muted);white-space:nowrap">sem snapshot</span>`}
+      </div>
+    </div>`;
+  }).join('');
 
-  
-atualizarContador();
+  atualizarContador();
 }
 
 function atualizarContador(){
@@ -1848,8 +1906,67 @@ function atualizarContador(){
   el.textContent = hist.length || '';
 }
 
+let _modalSnapId = null;
+
+function visualizarHistorico(id){
+  const snap = localStorage.getItem('recibo_snap_'+id);
+  if(!snap){ alert('Snapshot não disponível.'); return; }
+  _modalSnapId = id;
+  g('modalReceiptContent').innerHTML = snap;
+  g('modalHistorico').classList.add('open');
+}
+
+async function baixarDoModal(){
+  const el = g('modalReceiptContent');
+  if(!el.innerHTML.trim()) return;
+  try{
+    const canvas = await html2canvas(el, {scale:3, useCORS:true, backgroundColor:'#ffffff'});
+    const img = canvas.toDataURL('image/png');
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF('p','mm','a4');
+    const w = 190;
+    pdf.addImage(img,'PNG',10,10,w, canvas.height * w / canvas.width);
+    pdf.save('recibo-historico.pdf');
+  } catch(e){ alert('Erro: '+e.message); }
+}
+
+async function baixarHistorico(id, tipo, nome){
+  const snap = localStorage.getItem('recibo_snap_'+id);
+  if(!snap){ alert('Snapshot não disponível.'); return; }
+  // render offscreen
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;width:700px';
+  tmp.innerHTML = snap;
+  document.body.appendChild(tmp);
+  try{
+    const canvas = await html2canvas(tmp, {scale:3, useCORS:true, backgroundColor:'#ffffff'});
+    const img = canvas.toDataURL('image/png');
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF('p','mm','a4');
+    pdf.addImage(img,'PNG',10,10,190, canvas.height * 190 / canvas.width);
+    pdf.save(`recibo-${tipo}-${nome}.pdf`.replace(/\s+/g,'-').toLowerCase());
+  } catch(e){ alert('Erro: '+e.message); }
+  document.body.removeChild(tmp);
+}
+
+function excluirHistorico(id){
+  if(!confirm('Excluir este recibo do histórico?')) return;
+  const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
+  const nova = hist.filter(h=>String(h.id)!==String(id));
+  localStorage.setItem('historicoRecibos', JSON.stringify(nova));
+  localStorage.removeItem('recibo_snap_'+id);
+  carregarHistorico();
+}
+
+// close modal on overlay click
+document.getElementById('modalHistorico').addEventListener('click', e=>{
+  if(e.target===g('modalHistorico')) g('modalHistorico').classList.remove('open');
+});
+
 function limparHistorico(){
-  if(!confirm('Limpar todo o histórico?')) return;
+  if(!confirm('Limpar todo o histórico? Os recibos salvos serão removidos.')) return;
+  const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
+  hist.forEach(h=>localStorage.removeItem('recibo_snap_'+h.id));
   localStorage.removeItem('historicoRecibos');
   carregarHistorico();
 }
@@ -2089,6 +2206,34 @@ window.addEventListener('load', ()=>{ atualizarBtnPro(); }, true);
 atualizarContador();
 </script>
 
+
+<!-- HISTORICO MODAL -->
+<div class="modal-overlay" id="modalHistorico">
+  <div class="modal" style="width:700px;max-width:98vw">
+    <button class="modal-close" onclick="g('modalHistorico').classList.remove('open')">✕</button>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+      <span style="font-weight:700;font-size:15px">Visualizar Recibo</span>
+      <button class="btn btn-primary btn-sm" id="btnBaixarModal" onclick="baixarDoModal()">⬇ Baixar PDF</button>
+    </div>
+    <div id="modalReceiptContent" style="background:#fff;border:1px solid #e2e8f4;border-radius:10px;overflow:hidden"></div>
+  </div>
+</div>
+
+<!-- SNAPSHOT MODAL -->
+<div class="modal-overlay" id="modalSnapshot">
+  <div class="modal" style="max-width:860px;width:95vw;padding:0;overflow:hidden">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border);background:var(--surface2)">
+      <span style="font-weight:700;font-size:14px">Visualizar Recibo</span>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn btn-primary btn-sm" id="btnDownloadSnap">⬇ Baixar PDF</button>
+        <button class="btn btn-ghost btn-icon" onclick="fecharSnapshot()">✕</button>
+      </div>
+    </div>
+    <div id="snapContent" style="overflow-y:auto;max-height:80vh;background:#f4f6fb;padding:20px">
+      <div id="snapReceiptWrap" style="background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,.1);overflow:hidden"></div>
+    </div>
+  </div>
+</div>
 
 <!-- PRO MODAL -->
 <div class="modal-overlay" id="modalPro">

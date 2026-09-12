@@ -583,6 +583,45 @@ body.dark #recibo-preview-simples {
 .preview-placeholder p { font-size: 13px; opacity: .6 }
 
 
+
+/* ── AUTOCOMPLETE ── */
+.ac-wrap { position: relative }
+.ac-list {
+  position: absolute;
+  top: 100%; left: 0; right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow2);
+  z-index: 200;
+  max-height: 180px;
+  overflow-y: auto;
+  display: none;
+}
+.ac-list.open { display: block }
+.ac-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
+  transition: background .1s;
+}
+.ac-item:last-child { border-bottom: none }
+.ac-item:hover { background: var(--accent-light); color: var(--accent) }
+.ac-item strong { display: block; font-size: 12.5px }
+.ac-item span { font-size: 11px; color: var(--muted) }
+.saved-pin {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--accent);
+  padding: 2px 7px;
+  background: var(--accent-light);
+  border-radius: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.saved-pin:hover { background: var(--accent); color: #fff }
+
 /* ── PRO MODAL ── */
 .modal-overlay {
   display: none;
@@ -685,23 +724,27 @@ body.dark #recibo-preview-simples {
       </div>
       <div class="card-body">
 
-        <div class="section-label">Locador</div>
+        <div class="section-label">Locador
+          <span class="saved-pin" id="pinLocador" onclick="carregarPerfilLocador()" style="display:none">📌 Usar salvo</span>
+          <span class="saved-pin" onclick="salvarPerfilLocador()" style="margin-left:4px">💾 Salvar</span>
+        </div>
         <div class="row">
-          <div class="field">
+          <div class="field ac-wrap">
             <label>Nome completo</label>
-            <input id="locador" placeholder="Ex: João da Silva" oninput="atualizar()">
+            <input id="locador" placeholder="Ex: João da Silva" oninput="atualizar();persistirAluguel()">
           </div>
           <div class="narrow">
             <label>CPF/CNPJ</label>
-            <input id="cpfLocador" placeholder="000.000.000-00" oninput="maskCpfCnpj(this);atualizar()" maxlength="18">
+            <input id="cpfLocador" placeholder="000.000.000-00" oninput="maskCpfCnpj(this);atualizar();persistirAluguel()" maxlength="18">
           </div>
         </div>
 
         <div class="section-label">Locatário</div>
         <div class="row">
-          <div class="field">
+          <div class="field ac-wrap">
             <label>Nome completo</label>
-            <input id="locatario" list="listaClientes" placeholder="Ex: Maria Oliveira" oninput="atualizar()" onchange="preencherClienteAluguel()">
+            <input id="locatario" placeholder="Ex: Maria Oliveira" oninput="atualizar();persistirAluguel();acBuscar(this,'locatario-list','locatario','cpfLocatario')" autocomplete="off">
+            <div class="ac-list" id="locatario-list"></div>
           </div>
           <div class="narrow">
             <label>CPF/CNPJ</label>
@@ -788,7 +831,7 @@ body.dark #recibo-preview-simples {
         <div class="row">
           <div class="field">
             <label>Forma de pagamento</label>
-            <select id="forma" onchange="atualizar()">
+            <select id="forma" onchange="atualizar();persistirAluguel()">
               <option>Pix</option><option>Dinheiro</option>
               <option>Transferência</option><option>Cartão</option>
             </select>
@@ -919,23 +962,27 @@ body.dark #recibo-preview-simples {
       </div>
       <div class="card-body">
 
-        <div class="section-label">Emissor</div>
+        <div class="section-label">Emissor
+          <span class="saved-pin" id="pinEmissor" onclick="carregarPerfilEmissor()" style="display:none">📌 Usar salvo</span>
+          <span class="saved-pin" onclick="salvarPerfilEmissor()" style="margin-left:4px">💾 Salvar</span>
+        </div>
         <div class="row">
           <div class="field">
             <label>Nome</label>
-            <input id="emissor" placeholder="Quem recebe" oninput="atualizarSimples()">
+            <input id="emissor" placeholder="Quem recebe" oninput="atualizarSimples();persistirSimples()">
           </div>
           <div class="narrow">
             <label>CPF/CNPJ</label>
-            <input id="cpfEmissor" placeholder="000.000.000-00" oninput="maskCpfCnpj(this);atualizarSimples()" maxlength="18">
+            <input id="cpfEmissor" placeholder="000.000.000-00" oninput="maskCpfCnpj(this);atualizarSimples();persistirSimples()" maxlength="18">
           </div>
         </div>
 
         <div class="section-label">Pagador</div>
         <div class="row">
-          <div class="field">
+          <div class="field ac-wrap">
             <label>Nome</label>
-            <input id="pagador" list="listaClientes" placeholder="Quem paga" oninput="atualizarSimples()" onchange="preencherClienteSimples()">
+            <input id="pagador" placeholder="Quem paga" oninput="atualizarSimples();persistirSimples();acBuscar(this,'pagador-list','pagador','cpfPagador')" autocomplete="off">
+            <div class="ac-list" id="pagador-list"></div>
           </div>
           <div class="narrow">
             <label>CPF/CNPJ</label>
@@ -1022,8 +1069,6 @@ body.dark #recibo-preview-simples {
   </div>
 </div>
 
-<datalist id="listaClientes"></datalist>
-
 <script>
 // ═══════════════════════════════════════
 // TEMA
@@ -1085,10 +1130,12 @@ function maskCep(el){
 function maskCpfCnpj(el){
   let v = el.value.replace(/\D/g,'');
   if(v.length <= 11){
+    // CPF: 000.000.000-00
     v = v.replace(/(\d{3})(\d)/,'$1.$2');
     v = v.replace(/(\d{3})(\d)/,'$1.$2');
     v = v.replace(/(\d{3})(\d{1,2})$/,'$1-$2');
   } else {
+    // CNPJ: 00.000.000/0000-00
     v = v.slice(0,14);
     v = v.replace(/(\d{2})(\d)/,'$1.$2');
     v = v.replace(/(\d{3})(\d)/,'$1.$2');
@@ -1096,48 +1143,6 @@ function maskCpfCnpj(el){
     v = v.replace(/(\d{4})(\d{1,2})$/,'$1-$2');
   }
   el.value = v;
-}
-
-// ═══════════════════════════════════════
-// DADOS SALVOS (Locador/Emissor + Clientes)
-// ═══════════════════════════════════════
-function carregarDadosSalvos(){
-  const loc = JSON.parse(localStorage.getItem('meuLocador')||'{}');
-  if(loc.nome){ g('locador').value = loc.nome; g('cpfLocador').value = loc.cpf||''; }
-  const emi = JSON.parse(localStorage.getItem('meuEmissor')||'{}');
-  if(emi.nome){ g('emissor').value = emi.nome; g('cpfEmissor').value = emi.cpf||''; }
-  popularListaClientes();
-}
-function salvarMeusDados(){
-  localStorage.setItem('meuLocador', JSON.stringify({nome:g('locador').value.trim(), cpf:g('cpfLocador').value}));
-}
-function salvarMeusDadosSimples(){
-  localStorage.setItem('meuEmissor', JSON.stringify({nome:g('emissor').value.trim(), cpf:g('cpfEmissor').value}));
-}
-function getClientes(){ return JSON.parse(localStorage.getItem('meusClientes')||'[]'); }
-function salvarCliente(nome, cpf){
-  if(!nome) return;
-  let lista = getClientes();
-  const idx = lista.findIndex(c=>c.nome.toLowerCase()===nome.toLowerCase());
-  if(idx>=0) lista[idx].cpf = cpf || lista[idx].cpf;
-  else lista.push({nome, cpf: cpf||''});
-  localStorage.setItem('meusClientes', JSON.stringify(lista));
-  popularListaClientes();
-}
-function popularListaClientes(){
-  const dl = g('listaClientes');
-  if(!dl) return;
-  dl.innerHTML = getClientes().map(c=>`<option value="${c.nome}">`).join('');
-}
-function preencherClienteAluguel(){
-  const c = getClientes().find(c=>c.nome.toLowerCase()===g('locatario').value.trim().toLowerCase());
-  if(c) g('cpfLocatario').value = c.cpf;
-  atualizar();
-}
-function preencherClienteSimples(){
-  const c = getClientes().find(c=>c.nome.toLowerCase()===g('pagador').value.trim().toLowerCase());
-  if(c) g('cpfPagador').value = c.cpf;
-  atualizarSimples();
 }
 
 function valorPorExtenso(valorStr){
@@ -1223,6 +1228,7 @@ function configurarCanvas(canvasId, labelId){
     if(!desenhando) return;
     e.preventDefault();
     const p=pos(e); ctx.lineTo(p.x,p.y); ctx.stroke();
+    // trigger update
     if(canvasId==='assinaturaCanvas') atualizar();
     else atualizarSimples();
   }
@@ -1236,11 +1242,15 @@ function configurarCanvas(canvasId, labelId){
 }
 
 window.addEventListener('load',()=>{
-  carregarDadosSalvos();
   configurarCanvas('assinaturaCanvas','sigLabel');
   configurarCanvas('assinaturaSimples','sigLabelSimples');
+  verificarPerfis();
+  restaurarAluguel();
+  restaurarSimples();
+  // set default mes to current month
   const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   g('mes').value = meses[new Date().getMonth()];
+  // set today
   const today = new Date().toISOString().split('T')[0];
   g('dataPagamento').value = today;
   g('dataSimples').value = today;
@@ -1375,6 +1385,7 @@ function buildReceiptAluguel(){
   const sigData = canvas.toDataURL();
   const hasSig = isSigned('assinaturaCanvas');
 
+  // ── valores e multa (declarar primeiro) ──
   const obs = g('obs').value.trim();
   const tipo = g('tipoImovel').value;
   const complemento = g('complemento').value.trim();
@@ -1413,6 +1424,7 @@ function buildReceiptAluguel(){
     ? `Recebi(emos) de <strong>${locatario}</strong> a quantia de <strong>${totalStr}</strong> (<em>${valorExtenso}</em>), referente ao pagamento do aluguel ${tipoFrase}, correspondente ao mês de <strong>${g('mes').value} de ${g('ano').value}</strong>, via <strong>${g('forma').value}</strong>. Dou plena quitação pelo valor recebido.`
     : '';
 
+  // ── parcelas ──
   const jp = parseFloat(g('jurosParcela').value)||0;
   const parcelas = [...document.querySelectorAll('#parcelas .parcela-item')].map((p,i)=>{
     const inputs = p.querySelectorAll('input');
@@ -1431,6 +1443,7 @@ function buildReceiptAluguel(){
     </div>`;
   }).join('');
 
+  // ── despesas ──
   const despesas = g('exibirDespesas').checked
     ? [...document.querySelectorAll('#despesaLista .parcela-item')].map(p=>{
         const inputs = p.querySelectorAll('input');
@@ -1445,8 +1458,11 @@ function buildReceiptAluguel(){
       }).filter(Boolean).join('')
     : '';
 
+  // ── cálculo financeiro ──
+  // valor base = aluguel (+ multa se houver)
   const valorBase = comMulta ? totalComMulta : (isNaN(valorNum) ? 0 : valorNum);
 
+  // despesas
   const despesaEls = g('exibirDespesas').checked
     ? [...document.querySelectorAll('#despesaLista .parcela-item')] : [];
   let totalDespesas = 0;
@@ -1455,8 +1471,10 @@ function buildReceiptAluguel(){
     if(!isNaN(v)) totalDespesas += v;
   });
 
+  // SUBTOTAL = aluguel + despesas (tudo o que é devido, sem juros de parcelamento)
   const subTotal = valorBase + totalDespesas;
 
+  // parcelas: soma sem juros e com juros separados
   const parcelaEls = [...document.querySelectorAll('#parcelas .parcela-item')];
   let somaParcelasSemJuros = 0;
   let somaParcelasComJuros = 0;
@@ -1470,8 +1488,10 @@ function buildReceiptAluguel(){
   const temParcelas = parcelaEls.length > 0 && somaParcelasSemJuros > 0;
   const totalJurosParcela = jp ? somaParcelasComJuros - somaParcelasSemJuros : 0;
 
+  // SALDO DEVEDOR = subtotal - soma das parcelas (sem juros) → o que ainda falta cobrir
   const saldoDevedor = subTotal - somaParcelasSemJuros;
 
+  // TOTAL GERAL = subtotal + juros de parcelamento (custo final)
   const totalGeral = subTotal + totalJurosParcela;
 
   const mostrarFinanceiro = temParcelas || totalDespesas > 0;
@@ -1636,6 +1656,7 @@ function buildReceiptSimples(){
   const formaS = g('formaSimples').value;
   const referente = g('referenteSimples').value.trim();
 
+  // parcelas simples
   const jpS = parseFloat(g('jurosParcelaSimples').value)||0;
   const parcelaElsS = [...document.querySelectorAll('#parcelasSimples .parcela-item')];
   let somaSemJurosS = 0, somaComJurosS = 0;
@@ -1646,6 +1667,7 @@ function buildReceiptSimples(){
   const temParcelasS = parcelaElsS.length > 0 && somaSemJurosS > 0;
   const jurosAbsS = somaComJurosS - somaSemJurosS;
 
+  // valor base e total
   const valorStr = g('valorSimples').value||'R$ 0,00';
   const valorNumS = parseFloat(String(valorStr).replace(/[^\d,]/g,'').replace(',','.'));
   const totalS = temParcelasS ? somaComJurosS : (isNaN(valorNumS)?0:valorNumS);
@@ -1778,13 +1800,11 @@ function isSigned(canvasId){
 // ATUALIZAR PREVIEW
 // ═══════════════════════════════════════
 function atualizar(){
-  salvarMeusDados();
   const html = buildReceiptAluguel();
   g('recibo-preview').innerHTML = html || `<div class="preview-placeholder"><div class="icon">📋</div><p>Preencha os dados ao lado para visualizar o recibo</p></div>`;
 }
 
 function atualizarSimples(){
-  salvarMeusDadosSimples();
   const html = buildReceiptSimples();
   g('recibo-preview-simples').innerHTML = html || `<div class="preview-placeholder"><div class="icon">📋</div><p>Preencha os dados ao lado para visualizar o recibo</p></div>`;
 }
@@ -1808,12 +1828,12 @@ async function gerarPDF(previewId, filename, tipo){
     pdf.addImage(img,'PNG',10,10,w,h);
     pdf.save(filename);
 
+    // salvar histórico com snapshot do recibo
     const snapshot = el.innerHTML;
+    registrarClientes(tipo);
     if(tipo==='aluguel'){
-      salvarCliente(g('locatario').value.trim(), g('cpfLocatario').value);
       salvarHistorico('Aluguel', `${g('locador').value} → ${g('locatario').value}`, g('valor').value, snapshot);
     } else {
-      salvarCliente(g('pagador').value.trim(), g('cpfPagador').value);
       salvarHistorico('Simples', `${g('emissor').value} → ${g('pagador').value}`, g('valorSimples').value, snapshot);
     }
     proximoNum();
@@ -1842,10 +1862,19 @@ function imprimirRecibo(previewId){
 function salvarHistorico(tipo, nome, valor, snapshot){
   const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
   const id = Date.now();
-  hist.push({ id, tipo, nome, valor, data: new Date().toLocaleDateString('pt-BR'), hora: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}), snapshotId: 'recibo_snap_'+id });
+  const snapshotId = 'recibo_snap_'+id;
+  hist.push({ id, tipo, nome, valor, snapshotId, data: new Date().toLocaleDateString('pt-BR'), hora: new Date().toLocaleTimeString('pt-BR',{hour:'2-digit',minute:'2-digit'}) });
   localStorage.setItem('historicoRecibos', JSON.stringify(hist));
-  try { localStorage.setItem('recibo_snap_'+id, snapshot||''); } catch(e){}
+  try { localStorage.setItem(snapshotId, snapshot||''); } catch(e){ console.warn('Snapshot nao salvo'); }
   atualizarContador();
+}
+
+function visualizarRecibo(sid){
+  const snap = localStorage.getItem(sid);
+  if(!snap){ alert('Snapshot não encontrado.'); return; }
+  g('snapReceiptWrap').innerHTML = snap;
+  g('btnDownloadSnap').onclick = ()=>baixarReciboHistorico(sid);
+  document.getElementById('modalSnapshot').classList.add('open');
 }
 
 function fecharSnapshot(){
@@ -1860,6 +1889,7 @@ document.getElementById('modalSnapshot').addEventListener('click', e=>{
 async function baixarReciboHistorico(sid, tipo){
   const snap = localStorage.getItem(sid);
   if(!snap){ alert('Snapshot não encontrado.'); return; }
+  // render off-screen
   const wrap = document.createElement('div');
   wrap.style.cssText='position:fixed;left:-9999px;top:0;background:#fff;width:800px;font-family:Figtree,sans-serif';
   wrap.innerHTML = snap;
@@ -1876,21 +1906,14 @@ async function baixarReciboHistorico(sid, tipo){
   finally{ document.body.removeChild(wrap); }
 }
 
-function visualizarRecibo(sid){
-  const snap = localStorage.getItem(sid);
-  if(!snap){ alert('Snapshot não encontrado.'); return; }
-  g('snapReceiptWrap').innerHTML = snap;
-  g('btnDownloadSnap').onclick = ()=>baixarReciboHistorico(sid);
-  document.getElementById('modalSnapshot').classList.add('open');
-}
-
 function atualizarContador(){
   const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
   const el = g('hist-count');
   el.textContent = hist.length || '';
+  // storage usage warning
   let total = 0;
   for(let k in localStorage){ try{ total += localStorage[k].length; }catch(e){} }
-  const pct = Math.round(total/51200*100);
+  const pct = Math.round(total/51200*100); // ~5MB in KB*10
   const warn = g('storageWarn');
   if(warn) warn.style.display = pct>70 ? '' : 'none';
 }
@@ -1928,25 +1951,20 @@ function carregarHistorico(){
   atualizarContador();
 }
 
-function excluirHistorico(id){
-  if(!confirm('Excluir este recibo do histórico?')) return;
+function atualizarContador(){
   const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
-  const nova = hist.filter(h=>String(h.id)!==String(id));
-  localStorage.setItem('historicoRecibos', JSON.stringify(nova));
-  localStorage.removeItem('recibo_snap_'+id);
-  carregarHistorico();
+  const el = g('hist-count');
+  el.textContent = hist.length || '';
 }
 
-document.getElementById('modalHistorico').addEventListener('click', e=>{
-  if(e.target===g('modalHistorico')) g('modalHistorico').classList.remove('open');
-});
+let _modalSnapId = null;
 
-function limparHistorico(){
-  if(!confirm('Limpar todo o histórico? Os recibos salvos serão removidos.')) return;
-  const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
-  hist.forEach(h=>localStorage.removeItem('recibo_snap_'+h.id));
-  localStorage.removeItem('historicoRecibos');
-  carregarHistorico();
+function visualizarHistorico(id){
+  const snap = localStorage.getItem('recibo_snap_'+id);
+  if(!snap){ alert('Snapshot não disponível.'); return; }
+  _modalSnapId = id;
+  g('modalReceiptContent').innerHTML = snap;
+  g('modalHistorico').classList.add('open');
 }
 
 async function baixarDoModal(){
@@ -1963,17 +1981,59 @@ async function baixarDoModal(){
   } catch(e){ alert('Erro: '+e.message); }
 }
 
+async function baixarHistorico(id, tipo, nome){
+  const snap = localStorage.getItem('recibo_snap_'+id);
+  if(!snap){ alert('Snapshot não disponível.'); return; }
+  // render offscreen
+  const tmp = document.createElement('div');
+  tmp.style.cssText = 'position:fixed;left:-9999px;top:0;background:#fff;width:700px';
+  tmp.innerHTML = snap;
+  document.body.appendChild(tmp);
+  try{
+    const canvas = await html2canvas(tmp, {scale:3, useCORS:true, backgroundColor:'#ffffff'});
+    const img = canvas.toDataURL('image/png');
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF('p','mm','a4');
+    pdf.addImage(img,'PNG',10,10,190, canvas.height * 190 / canvas.width);
+    pdf.save(`recibo-${tipo}-${nome}.pdf`.replace(/\s+/g,'-').toLowerCase());
+  } catch(e){ alert('Erro: '+e.message); }
+  document.body.removeChild(tmp);
+}
+
+function excluirHistorico(id){
+  if(!confirm('Excluir este recibo do histórico?')) return;
+  const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
+  const nova = hist.filter(h=>String(h.id)!==String(id));
+  localStorage.setItem('historicoRecibos', JSON.stringify(nova));
+  localStorage.removeItem('recibo_snap_'+id);
+  carregarHistorico();
+}
+
+// close modal on overlay click
+document.getElementById('modalHistorico').addEventListener('click', e=>{
+  if(e.target===g('modalHistorico')) g('modalHistorico').classList.remove('open');
+});
+
+function limparHistorico(){
+  if(!confirm('Limpar todo o histórico? Os recibos salvos serão removidos.')) return;
+  const hist = JSON.parse(localStorage.getItem('historicoRecibos')||'[]');
+  hist.forEach(h=>localStorage.removeItem('recibo_snap_'+h.id));
+  localStorage.removeItem('historicoRecibos');
+  carregarHistorico();
+}
+
 // ═══════════════════════════════════════
 // LIMPAR FORMS
 // ═══════════════════════════════════════
 function limparAluguel(){
-  ['locatario','cpfLocatario','cep','logradouro','numero','complemento','bairro','cidade','uf','valor','obs'].forEach(id=>g(id).value='');
+  ['locador','cpfLocador','locatario','cpfLocatario','cep','logradouro','numero','complemento','bairro','cidade','uf','valor','obs'].forEach(id=>g(id).value='');
   g('tipoImovel').value='imóvel';
   g('multaPerc').value='2';
   g('jurosPerc').value='1';
   g('diaVencimento').value='5';
   g('indiceReajuste').value='IGP-M';
   g('exibirMulta').checked=false;
+  localStorage.removeItem('persist_aluguel');
   g('dataPagamento').value = new Date().toISOString().split('T')[0];
   g('parcelas').innerHTML=''; parcelaCount=0;
   g('despesaLista').innerHTML=''; despesaCount=0;
@@ -2038,10 +2098,11 @@ function recalcParcelasSimples(){
 }
 
 function limparSimples(){
-  ['pagador','cpfPagador','valorSimples','referenteSimples'].forEach(id=>g(id).value='');
+  ['emissor','cpfEmissor','pagador','cpfPagador','valorSimples','referenteSimples'].forEach(id=>g(id).value='');
   g('formaSimples').value='Pix';
   g('dataSimples').value = new Date().toISOString().split('T')[0];
   g('jurosParcelaSimples').value='0';
+  localStorage.removeItem('persist_simples');
   g('parcelasSimples').innerHTML=''; parcelaCountSimples=0;
   limparAssinatura('assinaturaSimples','sigLabelSimples');
   atualizarSimples();
@@ -2053,6 +2114,130 @@ function novoRecibo(){
   else limparAluguel();
 }
 
+
+// ═══════════════════════════════════════
+// PERSISTÊNCIA & AUTOCOMPLETE
+// ═══════════════════════════════════════
+
+// ── Perfil salvo (Locador / Emissor) ──
+function salvarPerfilLocador(){
+  const p = { nome: g('locador').value, cpf: g('cpfLocador').value };
+  localStorage.setItem('perfil_locador', JSON.stringify(p));
+  g('pinLocador').style.display = '';
+  showToast('Dados do Locador salvos!');
+}
+function carregarPerfilLocador(){
+  const p = JSON.parse(localStorage.getItem('perfil_locador')||'{}');
+  if(p.nome) g('locador').value = p.nome;
+  if(p.cpf)  g('cpfLocador').value = p.cpf;
+  atualizar();
+}
+function salvarPerfilEmissor(){
+  const p = { nome: g('emissor').value, cpf: g('cpfEmissor').value };
+  localStorage.setItem('perfil_emissor', JSON.stringify(p));
+  g('pinEmissor').style.display = '';
+  showToast('Dados do Emissor salvos!');
+}
+function carregarPerfilEmissor(){
+  const p = JSON.parse(localStorage.getItem('perfil_emissor')||'{}');
+  if(p.nome) g('emissor').value = p.nome;
+  if(p.cpf)  g('cpfEmissor').value = p.cpf;
+  atualizarSimples();
+}
+
+// ── Toast notification ──
+function showToast(msg){
+  let t = document.getElementById('grToast');
+  if(!t){
+    t = document.createElement('div');
+    t.id = 'grToast';
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:#1a2035;color:#fff;padding:10px 20px;border-radius:30px;font-size:13px;font-weight:600;z-index:9999;opacity:0;transition:all .25s;pointer-events:none';
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity='1'; t.style.transform='translateX(-50%) translateY(0)';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateX(-50%) translateY(20px)'; }, 2500);
+}
+
+// ── Autocomplete ──
+function getClientes(){
+  return JSON.parse(localStorage.getItem('graver_clientes')||'[]');
+}
+function salvarCliente(nome, cpf){
+  if(!nome) return;
+  const lista = getClientes();
+  const idx = lista.findIndex(c=>c.nome.toLowerCase()===nome.toLowerCase());
+  if(idx>=0){ lista[idx]={nome,cpf}; } else { lista.unshift({nome,cpf}); }
+  if(lista.length>50) lista.pop();
+  localStorage.setItem('graver_clientes', JSON.stringify(lista));
+}
+function acBuscar(input, listId, nomeId, cpfId){
+  const q = input.value.trim().toLowerCase();
+  const list = g(listId);
+  if(!q){ list.classList.remove('open'); return; }
+  const matches = getClientes().filter(c=>c.nome.toLowerCase().includes(q));
+  if(!matches.length){ list.classList.remove('open'); return; }
+  list.innerHTML = matches.slice(0,8).map(c=>`
+    <div class="ac-item" onmousedown="acSelecionar('${nomeId}','${cpfId}','${listId}',${JSON.stringify(c.nome)},${JSON.stringify(c.cpf||'')})">
+      <strong>${c.nome}</strong>
+      ${c.cpf?`<span>${c.cpf}</span>`:''}
+    </div>`).join('');
+  list.classList.add('open');
+}
+function acSelecionar(nomeId, cpfId, listId, nome, cpf){
+  g(nomeId).value = nome;
+  if(cpf) g(cpfId).value = cpf;
+  g(listId).classList.remove('open');
+  atualizar(); atualizarSimples();
+}
+// close autocomplete on outside click
+document.addEventListener('click', e=>{
+  document.querySelectorAll('.ac-list').forEach(l=>{
+    if(!l.previousElementSibling?.contains(e.target)) l.classList.remove('open');
+  });
+});
+
+// ── Persistência do formulário ──
+function persistirAluguel(){
+  const campos = ['locador','cpfLocador','locatario','cpfLocatario','cep','logradouro',
+    'numero','complemento','bairro','cidade','uf','valor','obs','mes','ano',
+    'forma','dataPagamento','diaVencimento','multaPerc','jurosPerc','indiceReajuste'];
+  const data = {};
+  campos.forEach(id=>{ const el=g(id); if(el) data[id]=el.value; });
+  localStorage.setItem('persist_aluguel', JSON.stringify(data));
+}
+function persistirSimples(){
+  const campos = ['emissor','cpfEmissor','pagador','cpfPagador','valorSimples','referenteSimples','dataSimples','formaSimples'];
+  const data = {};
+  campos.forEach(id=>{ const el=g(id); if(el) data[id]=el.value; });
+  localStorage.setItem('persist_simples', JSON.stringify(data));
+}
+function restaurarAluguel(){
+  const data = JSON.parse(localStorage.getItem('persist_aluguel')||'{}');
+  Object.entries(data).forEach(([id,val])=>{ const el=g(id); if(el) el.value=val; });
+  atualizar();
+}
+function restaurarSimples(){
+  const data = JSON.parse(localStorage.getItem('persist_simples')||'{}');
+  Object.entries(data).forEach(([id,val])=>{ const el=g(id); if(el) el.value=val; });
+  atualizarSimples();
+}
+function verificarPerfis(){
+  if(localStorage.getItem('perfil_locador')){
+    g('pinLocador').style.display='';
+    carregarPerfilLocador();
+  }
+  if(localStorage.getItem('perfil_emissor')){
+    g('pinEmissor').style.display='';
+    carregarPerfilEmissor();
+  }
+}
+// Save client on PDF generation
+function registrarClientes(tipo){
+  if(tipo==='aluguel') salvarCliente(g('locatario').value, g('cpfLocatario').value);
+  else salvarCliente(g('pagador').value, g('cpfPagador').value);
+}
 
 // ═══════════════════════════════════════
 // PRO SYSTEM
@@ -2182,10 +2367,17 @@ function proReceiptFooter(){
   return `<span>${parts||'&nbsp;'}</span><span style="color:#aab4e8">Powered by Graver</span>`;
 }
 
+function proReceiptLogo(){
+  const logo = localStorage.getItem('graver_logo');
+  return logo ? `<img src="${logo}" style="max-height:54px;max-width:200px;width:auto;height:auto;object-fit:contain;display:block">` : '';
+}
+
+// close modal on overlay click
 document.getElementById('modalPro').addEventListener('click', e => {
   if(e.target === document.getElementById('modalPro')) fecharModalPro();
 });
 
+// init
 window.addEventListener('load', ()=>{ atualizarBtnPro(); }, true);
 
 atualizarContador();

@@ -1819,14 +1819,18 @@ async function gerarPDF(previewId, filename, tipo){
   el.style.background = '#fff';
 
   try{
-    const canvas = await html2canvas(el, {scale:3, useCORS:true, backgroundColor:'#ffffff'});
-    const img = canvas.toDataURL('image/png');
     const {jsPDF} = window.jspdf;
     const pdf = new jsPDF('p','mm','a4');
-    const w = 190;
-    const h = canvas.height * w / canvas.width;
-    pdf.addImage(img,'PNG',10,10,w,h);
-    pdf.save(filename);
+    await new Promise((resolve, reject) => {
+      pdf.html(el, {
+        callback: (doc) => { doc.save(filename); resolve(); },
+        x: 10, y: 10,
+        width: 190,
+        windowWidth: el.scrollWidth || 800,
+        html2canvas: { scale: 0.264583, useCORS: true, backgroundColor: '#ffffff', logging: false },
+        autoPaging: 'text'
+      });
+    });
 
     // salvar histórico com snapshot do recibo
     const snapshot = el.innerHTML;
@@ -1895,13 +1899,18 @@ async function baixarReciboHistorico(sid, tipo){
   wrap.innerHTML = snap;
   document.body.appendChild(wrap);
   try{
-    const canvas = await html2canvas(wrap,{scale:3,useCORS:true,backgroundColor:'#ffffff'});
-    const img = canvas.toDataURL('image/png');
     const {jsPDF} = window.jspdf;
     const pdf = new jsPDF('p','mm','a4');
-    const w=190, h=canvas.height*w/canvas.width;
-    pdf.addImage(img,'PNG',10,10,w,h);
-    pdf.save(`recibo-${tipo||'historico'}.pdf`);
+    await new Promise((resolve, reject) => {
+      pdf.html(wrap, {
+        callback: (doc) => { doc.save(`recibo-${tipo||'historico'}.pdf`); resolve(); },
+        x: 10, y: 10,
+        width: 190,
+        windowWidth: wrap.offsetWidth || 800,
+        html2canvas: { scale: 0.264583, useCORS: true, backgroundColor: '#ffffff', logging: false },
+        autoPaging: 'text'
+      });
+    });
   } catch(e){ alert('Erro ao gerar PDF: '+e.message); }
   finally{ document.body.removeChild(wrap); }
 }

@@ -1812,15 +1812,17 @@ function atualizarSimples(){
 // ═══════════════════════════════════════
 // PDF
 // ═══════════════════════════════════════
-// PDF em tamanho padrão de leitura: o recibo fica no topo do A4,
-// sem ser esticado para preencher a folha e sem reduzir a letra para caber.
-// Se o conteúdo exceder a área útil, continua nas páginas seguintes.
+// Exportação A4: recibo compacto (próximo de meia folha nos casos comuns),
+// com moldura nítida, tipografia legível e continuação sem cortes se necessário.
+// O visual na tela, os dados e o histórico não são modificados.
 async function exportarReciboPDF(elemento, nomeArquivo){
   const {jsPDF} = window.jspdf;
-  const larguraBase = 720; // largura fixa de composição, independente da prévia na tela
-  const larguraPDF = 175; // mm: tamanho de recibo legível, com margens no A4
-  const margemSuperior = 15;
-  const margemInferior = 15;
+  const larguraBase = 600; // px: composição própria para a exportação, sem depender da tela
+  const larguraPDF = 150; // mm: largura próxima da folha A5, dentro do papel A4
+  const margemSuperior = 17;
+  const margemInferior = 17;
+  const folgaMoldura = 2; // mm: moldura é desenhada em vetor (não perde definição)
+
   const area = document.createElement('div');
   area.style.cssText = 'position:fixed;left:-10000px;top:0;width:'+larguraBase+'px;background:#fff;color:#1a2035;z-index:-1;overflow:visible;box-sizing:border-box';
   const origem = elemento.querySelector('.receipt-inner') || elemento;
@@ -1830,18 +1832,45 @@ async function exportarReciboPDF(elemento, nomeArquivo){
   conteudo.style.maxHeight = 'none';
   conteudo.style.overflow = 'visible';
   conteudo.style.overflowWrap = 'anywhere';
+
+  // Compactação EXCLUSIVA do PDF: mantém conteúdo, textos, fontes e identidade visual.
+  const ajustePDF = document.createElement('style');
+  ajustePDF.textContent = `
+    .receipt-inner { padding: 22px 28px !important; }
+    .receipt-header { margin-bottom: 15px !important; padding-bottom: 12px !important; }
+    .receipt-grid { gap: 9px !important; }
+    .receipt-value-box { margin: 11px 0 !important; padding: 10px 14px !important; }
+    .receipt-sig { margin-top: 13px !important; padding-top: 10px !important; }
+    .receipt-sig-box img { height: 39px !important; }
+    .receipt-sig-box > div[style*="height:50px"] { height: 39px !important; }
+    .receipt-footer { margin-top: 11px !important; padding-top: 9px !important; }
+    .receipt-obs { margin: 9px 0 !important; padding: 8px 12px !important; }
+    .receipt-parcela-row { padding: 5px 9px !important; }
+    .receipt-inner > div[style*="margin:14px 0"] {
+      margin: 9px 0 !important; padding: 10px 12px !important;
+    }
+  `;
+  area.appendChild(ajustePDF);
   area.appendChild(conteudo);
   document.body.appendChild(area);
   try {
     if(document.fonts && document.fonts.ready) await document.fonts.ready;
     const imagens = Array.from(area.querySelectorAll('img'));
-    await Promise.all(imagens.map(img => img.complete ? Promise.resolve() : new Promise(resolve => { img.onload=resolve; img.onerror=resolve; })));
+    await Promise.all(imagens.map(img => img.complete ? Promise.resolve() : new Promise(resolve => {
+      img.onload = resolve;
+      img.onerror = resolve;
+    })));
 
-    // Localiza fins de blocos e linhas para priorizar quebras entre os textos.
-    const topoArea = area.getBoundingClientRect().top;
+    // Prefere separar páginas entre blocos, evitando cortar assinatura e linhas.
+    const topoArea = conteudo.getBoundingClientRect().top;
     const limitesBlocos = [];
     const limitesLinhas = [];
-    area.querySelectorAll('.receipt-inner > *, .receipt-section, .receipt-grid > *, .receipt-parcela-row, .receipt-field, .receipt-sig-box, .receipt-footer, .receipt-obs').forEach(el => {
+    conteudo.querySelectorAll('.receipt-inner > *, .receipt-section, .receipt-grid > *, .receipt-parcela-row, .receipt-field, .receipt-sig-box, .receipt-footer, .receipt-obs').forEach(el => {
+      const r = el.getBoundingClientRect();
+      if(r.height > 0) limitesBlocos.push(r.bottom - topoArea + 3);
+    });
+    // A seleção acima inclui os elementos internos mesmo no recibo clonado.
+    Array.from(conteudo.children).forEach(el => {
       const r = el.getBoundingClientRect();
       if(r.height > 0) limitesBlocos.push(r.bottom - topoArea + 3);
     });
@@ -1856,9 +1885,10 @@ async function exportarReciboPDF(elemento, nomeArquivo){
       }
     }
 
-    const canvas = await html2canvas(area, {
-      scale: 1.5, useCORS: true, backgroundColor: '#ffffff', logging: false,
-      width: larguraBase, height: Math.ceil(area.scrollHeight),
+    // Captura com ~239 dpi efetivos: mais definição que a versão anterior (1,5x).
+    const canvas = await html2canvas(conteudo, {
+      scale: 2.4, useCORS: true, backgroundColor: '#ffffff', logging: false,
+      width: larguraBase, height: Math.ceil(conteudo.scrollHeight),
       windowWidth: Math.max(document.documentElement.clientWidth, larguraBase),
       scrollX: 0, scrollY: 0
     });
@@ -1866,7 +1896,7 @@ async function exportarReciboPDF(elemento, nomeArquivo){
 
     const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
     const larguraPagina = pdf.internal.pageSize.getWidth();
-    const alturaUtil = pdf.internal.pageSize.getHeight() - margemSuperior - margemInferior;
+    const alturaUtil = pdf.internal.pageSize.getHeight() - margemSuperior - margemInferior - folgaMoldura;
     const deslocX = (larguraPagina - larguraPDF) / 2;
     const pxPorMm = canvas.width / larguraPDF;
     const pxPorCss = canvas.width / larguraBase;
@@ -1874,13 +1904,12 @@ async function exportarReciboPDF(elemento, nomeArquivo){
     let inicioPx = 0;
     let pagina = 0;
 
-    while(inicioPx < canvas.height){
+    while(inicioPx < canvas.height) {
       const limitePx = Math.min(canvas.height, inicioPx + alturaMaximaPx);
       let fimPx = limitePx;
-      if(limitePx < canvas.height){
-        // Evita separar parcelas, assinaturas ou linhas de texto entre páginas.
+      if(limitePx < canvas.height) {
         const limiteCss = limitePx / pxPorCss;
-        const minimoCss = (inicioPx + alturaMaximaPx * 0.65) / pxPorCss;
+        const minimoCss = (inicioPx + alturaMaximaPx * 0.60) / pxPorCss;
         const escolher = lista => lista.filter(y => y >= minimoCss && y <= limiteCss - 6)
           .reduce((maior, y) => Math.max(maior, y), 0);
         const fimSeguroCss = escolher(limitesBlocos) || escolher(limitesLinhas);
@@ -1888,6 +1917,7 @@ async function exportarReciboPDF(elemento, nomeArquivo){
       }
       fimPx = Math.min(canvas.height, Math.max(inicioPx + 1, fimPx));
       const alturaPx = fimPx - inicioPx;
+      const alturaMm = alturaPx / pxPorMm;
       const fatia = document.createElement('canvas');
       fatia.width = canvas.width;
       fatia.height = alturaPx;
@@ -1896,9 +1926,16 @@ async function exportarReciboPDF(elemento, nomeArquivo){
       ctx.fillRect(0, 0, fatia.width, fatia.height);
       ctx.drawImage(canvas, 0, inicioPx, canvas.width, alturaPx, 0, 0, canvas.width, alturaPx);
       if(pagina > 0) pdf.addPage();
-      // JPEG otimizado mantém o PDF menor que uma imagem PNG de alta resolução.
-      pdf.addImage(fatia.toDataURL('image/jpeg', 0.78), 'JPEG', deslocX, margemSuperior,
-        larguraPDF, alturaPx / pxPorMm, undefined, 'FAST');
+
+      // JPEG de alta qualidade: mantém boa nitidez sem gerar PDFs muito pesados.
+      pdf.addImage(fatia.toDataURL('image/jpeg', 0.90), 'JPEG', deslocX, margemSuperior,
+        larguraPDF, alturaMm, undefined, 'FAST');
+
+      // Moldura vetorial com as mesmas tonalidades da borda vista na tela.
+      pdf.setDrawColor(189, 201, 222);
+      pdf.setLineWidth(0.30);
+      pdf.roundedRect(deslocX - folgaMoldura, margemSuperior - folgaMoldura,
+        larguraPDF + 2 * folgaMoldura, alturaMm + 2 * folgaMoldura, 1.4, 1.4, 'S');
       inicioPx = fimPx;
       pagina++;
     }

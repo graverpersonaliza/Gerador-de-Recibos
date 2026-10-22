@@ -1908,11 +1908,47 @@ async function exportarReciboPDF(elemento, nomeArquivo){
   }
 }
 
+// Nome do arquivo baseado na referência exibida no próprio recibo.
+// Também funciona para recibos antigos recuperados do histórico.
+function nomePDFComMesAno(recibo, tipo){
+  const meses = ['janeiro','fevereiro','marco','abril','maio','junho',
+                 'julho','agosto','setembro','outubro','novembro','dezembro'];
+  const titulo = (recibo.querySelector('.receipt-title')?.textContent || '').toLowerCase();
+  const aluguel = String(tipo||'').toLowerCase() === 'aluguel' || titulo.includes('aluguel');
+  let mes = '', ano = '';
+
+  if(aluguel){
+    // O mês e o ano de competência já constam do cabeçalho do recibo de aluguel.
+    const referencia = recibo.querySelector('.receipt-subtitle')?.textContent || '';
+    const match = referencia.match(/(janeiro|fevereiro|março|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\s+de\s+(\d{4})/i);
+    if(match){
+      mes = match[1].toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+      ano = match[2];
+    }
+  } else {
+    // O recibo simples utiliza a data de pagamento impressa no cabeçalho.
+    const dataTexto = recibo.querySelector('.receipt-num div')?.textContent || '';
+    const match = dataTexto.match(/\b\d{1,2}\/(\d{1,2})\/(\d{4})\b/);
+    if(match){
+      const indice = Number(match[1]) - 1;
+      if(indice >= 0 && indice < 12){ mes = meses[indice]; ano = match[2]; }
+    }
+  }
+
+  // Evita nomes vazios se um recibo antigo não tiver a referência esperada.
+  if(!mes || !ano){
+    const hoje = new Date();
+    mes = meses[hoje.getMonth()];
+    ano = String(hoje.getFullYear());
+  }
+  return `recibo-${aluguel?'aluguel':'simples'}-${mes}-${ano}.pdf`;
+}
+
 async function gerarPDF(previewId, filename, tipo){
   const el = g(previewId);
   if(el.querySelector('.preview-placeholder')){ alert('Preencha os dados primeiro.'); return; }
   try {
-    await exportarReciboPDF(el,filename);
+    await exportarReciboPDF(el,nomePDFComMesAno(el,tipo));
     // Histórico e numeração preservados.
     const snapshot = el.innerHTML;
     registrarClientes(tipo);
@@ -1979,7 +2015,7 @@ async function baixarReciboHistorico(sid, tipo){
   if(!snap){ alert('Snapshot não encontrado.'); return; }
   const wrap = document.createElement('div');
   wrap.innerHTML = snap;
-  try { await exportarReciboPDF(wrap,`recibo-${tipo||'historico'}.pdf`); }
+  try { await exportarReciboPDF(wrap,nomePDFComMesAno(wrap,tipo)); }
   catch(e){ alert('Erro ao gerar PDF: '+e.message); }
 }
 
@@ -2047,7 +2083,7 @@ function visualizarHistorico(id){
 async function baixarDoModal(){
   const el = g('modalReceiptContent');
   if(!el.innerHTML.trim()) return;
-  try { await exportarReciboPDF(el,'recibo-historico.pdf'); }
+  try { await exportarReciboPDF(el,nomePDFComMesAno(el)); }
   catch(e){ alert('Erro: '+e.message); }
 }
 
@@ -2057,7 +2093,7 @@ async function baixarHistorico(id, tipo, nome){
   const tmp = document.createElement('div');
   tmp.innerHTML = snap;
   try {
-    await exportarReciboPDF(tmp,`recibo-${tipo}-${nome}.pdf`.replace(/\s+/g,'-').toLowerCase());
+    await exportarReciboPDF(tmp,nomePDFComMesAno(tmp,tipo));
   } catch(e){ alert('Erro: '+e.message); }
 }
 

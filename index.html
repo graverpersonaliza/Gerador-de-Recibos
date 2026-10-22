@@ -688,6 +688,33 @@ body.dark #recibo-preview-simples {
 ::-webkit-scrollbar { width: 6px }
 ::-webkit-scrollbar-track { background: transparent }
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px }
+
+/* ── SELEÇÃO DE LOCADORES E EMISSORES SALVOS ── */
+.saved-pin { border: 0; font-family: inherit; line-height: 1.6; }
+.perfil-picker-wrap { position: relative; display: inline-flex; align-items: center; margin-left: 8px; flex: 0 0 auto; }
+.perfil-menu {
+  display: none; position: absolute; top: calc(100% + 8px); left: 0;
+  width: min(315px, calc(100vw - 42px)); max-height: 270px; overflow-y: auto;
+  z-index: 250; background: var(--surface); border: 1px solid var(--border2);
+  border-radius: 10px; box-shadow: var(--shadow2); padding: 6px;
+  text-transform: none; letter-spacing: normal;
+}
+.perfil-menu.open { display: block; }
+.perfil-menu-title { padding: 7px 9px; color: var(--muted); font-size: 11px; font-weight: 700; }
+.perfil-menu-item { display: flex; align-items: center; gap: 4px; border-radius: 7px; }
+.perfil-menu-item:hover { background: var(--accent-light); }
+.perfil-menu-select {
+  display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: flex-start;
+  gap: 3px; padding: 9px 8px; cursor: pointer; color: var(--text);
+  font: inherit; text-align: left; background: transparent; border: none;
+}
+.perfil-menu-select strong { font-size: 12px; font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
+.perfil-menu-select small { font-size: 10.5px; color: var(--muted); }
+.perfil-menu-remove {
+  flex: 0 0 auto; padding: 6px; border: none; background: transparent;
+  color: var(--danger); font-size: 14px; cursor: pointer; border-radius: 6px;
+}
+.perfil-menu-remove:hover { background: #fff1f1; }
 </style>
 </head>
 <body>
@@ -725,8 +752,11 @@ body.dark #recibo-preview-simples {
       <div class="card-body">
 
         <div class="section-label">Locador
-          <span class="saved-pin" id="pinLocador" onclick="carregarPerfilLocador()" style="display:none">📌 Usar salvo</span>
-          <span class="saved-pin" onclick="salvarPerfilLocador()" style="margin-left:4px">💾 Salvar</span>
+          <div class="perfil-picker-wrap">
+            <button type="button" class="saved-pin" id="pinLocador" onclick="toggleListaPerfis('locador',event)" style="display:none" aria-expanded="false" aria-controls="listaPerfisLocador">📌 Usar salvo ▾</button>
+            <div class="perfil-menu" id="listaPerfisLocador" role="group" aria-label="Locadores salvos"></div>
+          </div>
+          <button type="button" class="saved-pin" onclick="salvarPerfilLocador()" style="margin-left:4px">💾 Salvar</button>
         </div>
         <div class="row">
           <div class="field ac-wrap">
@@ -963,8 +993,11 @@ body.dark #recibo-preview-simples {
       <div class="card-body">
 
         <div class="section-label">Emissor
-          <span class="saved-pin" id="pinEmissor" onclick="carregarPerfilEmissor()" style="display:none">📌 Usar salvo</span>
-          <span class="saved-pin" onclick="salvarPerfilEmissor()" style="margin-left:4px">💾 Salvar</span>
+          <div class="perfil-picker-wrap">
+            <button type="button" class="saved-pin" id="pinEmissor" onclick="toggleListaPerfis('emissor',event)" style="display:none" aria-expanded="false" aria-controls="listaPerfisEmissor">📌 Usar salvo ▾</button>
+            <div class="perfil-menu" id="listaPerfisEmissor" role="group" aria-label="Emissores salvos"></div>
+          </div>
+          <button type="button" class="saved-pin" onclick="salvarPerfilEmissor()" style="margin-left:4px">💾 Salvar</button>
         </div>
         <div class="row">
           <div class="field">
@@ -2261,31 +2294,134 @@ function novoRecibo(){
 // PERSISTÊNCIA & AUTOCOMPLETE
 // ═══════════════════════════════════════
 
-// ── Perfil salvo (Locador / Emissor) ──
-function salvarPerfilLocador(){
-  const p = { nome: g('locador').value, cpf: g('cpfLocador').value };
-  localStorage.setItem('perfil_locador', JSON.stringify(p));
-  g('pinLocador').style.display = '';
-  showToast('Dados do Locador salvos!');
+// ── Perfis de locadores e emissores: vários cadastros selecionáveis ──
+const perfilConfig = {
+  locador: { chave:'perfis_locadores', antiga:'perfil_locador', nome:'locador', cpf:'cpfLocador', botao:'pinLocador', lista:'listaPerfisLocador' },
+  emissor: { chave:'perfis_emissores', antiga:'perfil_emissor', nome:'emissor', cpf:'cpfEmissor', botao:'pinEmissor', lista:'listaPerfisEmissor' }
+};
+function lerPerfis(tipo){
+  const cfg=perfilConfig[tipo];
+  if(!cfg) return [];
+  let bruto=localStorage.getItem(cfg.chave);
+  // Migra, uma única vez, o cadastro salvo pelas versões anteriores.
+  if(bruto===null){
+    let antigo={};
+    try { antigo=JSON.parse(localStorage.getItem(cfg.antiga)||'{}')||{}; }catch(e){}
+    const lista=antigo.nome ? [{nome:String(antigo.nome),cpf:String(antigo.cpf||'')}] : [];
+    localStorage.setItem(cfg.chave,JSON.stringify(lista));
+    return lista;
+  }
+  try {
+    const lista=JSON.parse(bruto);
+    return Array.isArray(lista) ? lista.filter(p=>p&&typeof p.nome==='string'&&p.nome.trim()).map(p=>({nome:p.nome,cpf:String(p.cpf||'')})) : [];
+  }catch(e){return [];}
 }
-function carregarPerfilLocador(){
-  const p = JSON.parse(localStorage.getItem('perfil_locador')||'{}');
-  if(p.nome) g('locador').value = p.nome;
-  if(p.cpf)  g('cpfLocador').value = p.cpf;
-  atualizar();
+function exibirBotaoPerfis(tipo){
+  const cfg=perfilConfig[tipo];
+  const btn=g(cfg.botao);
+  btn.style.display=lerPerfis(tipo).length ? '' : 'none';
 }
-function salvarPerfilEmissor(){
-  const p = { nome: g('emissor').value, cpf: g('cpfEmissor').value };
-  localStorage.setItem('perfil_emissor', JSON.stringify(p));
-  g('pinEmissor').style.display = '';
-  showToast('Dados do Emissor salvos!');
+function salvarPerfil(tipo){
+  const cfg=perfilConfig[tipo];
+  const p={nome:g(cfg.nome).value.trim(),cpf:g(cfg.cpf).value.trim()};
+  if(!p.nome){showToast('Informe o nome antes de salvar.');g(cfg.nome).focus();return;}
+  const lista=lerPerfis(tipo);
+  const nomeKey=p.nome.toLocaleLowerCase('pt-BR');
+  const cpfKey=p.cpf.replace(/\D/g,'');
+  const indice=lista.findIndex(x=>
+    (cpfKey && x.cpf.replace(/\D/g,'')===cpfKey) || x.nome.trim().toLocaleLowerCase('pt-BR')===nomeKey
+  );
+  if(indice>=0) lista.splice(indice,1);
+  lista.unshift(p);
+  localStorage.setItem(cfg.chave,JSON.stringify(lista));
+  // Mantém a última escolha disponível para eventual retorno a uma versão antiga.
+  localStorage.setItem(cfg.antiga,JSON.stringify(p));
+  exibirBotaoPerfis(tipo);
+  renderizarListaPerfis(tipo);
+  showToast(indice>=0 ? 'Cadastro atualizado!' : 'Cadastro salvo!');
 }
-function carregarPerfilEmissor(){
-  const p = JSON.parse(localStorage.getItem('perfil_emissor')||'{}');
-  if(p.nome) g('emissor').value = p.nome;
-  if(p.cpf)  g('cpfEmissor').value = p.cpf;
-  atualizarSimples();
+function salvarPerfilLocador(){salvarPerfil('locador');}
+function salvarPerfilEmissor(){salvarPerfil('emissor');}
+function selecionarPerfil(tipo,indice,silencioso=false){
+  const cfg=perfilConfig[tipo];
+  const p=lerPerfis(tipo)[indice];
+  if(!p) return;
+  g(cfg.nome).value=p.nome;
+  g(cfg.cpf).value=p.cpf;
+  if(tipo==='locador'){atualizar();if(!silencioso) persistirAluguel();}
+  else {atualizarSimples();if(!silencioso) persistirSimples();}
+  fecharListasPerfis();
+  if(!silencioso) showToast('Cadastro selecionado: '+p.nome);
 }
+function carregarPerfilLocador(){selecionarPerfil('locador',0);}
+function carregarPerfilEmissor(){selecionarPerfil('emissor',0);}
+function excluirPerfil(tipo,indice){
+  const cfg=perfilConfig[tipo];
+  const lista=lerPerfis(tipo);
+  const p=lista[indice];
+  if(!p||!confirm('Excluir o cadastro salvo de '+p.nome+'?')) return;
+  lista.splice(indice,1);
+  localStorage.setItem(cfg.chave,JSON.stringify(lista));
+  // Impede que o último cadastro excluído volte na versão antiga.
+  if(!lista.length) localStorage.removeItem(cfg.antiga);
+  else localStorage.setItem(cfg.antiga,JSON.stringify(lista[0]));
+  exibirBotaoPerfis(tipo);
+  renderizarListaPerfis(tipo);
+  if(!lista.length) fecharListasPerfis();
+  showToast('Cadastro excluído.');
+}
+function renderizarListaPerfis(tipo){
+  const cfg=perfilConfig[tipo];
+  const menu=g(cfg.lista);
+  if(!menu) return;
+  menu.replaceChildren();
+  const lista=lerPerfis(tipo);
+  const titulo=document.createElement('div');
+  titulo.className='perfil-menu-title';
+  titulo.textContent=lista.length===1?'1 cadastro salvo':lista.length+' cadastros salvos';
+  menu.appendChild(titulo);
+  lista.forEach((p,i)=>{
+    const item=document.createElement('div');
+    item.className='perfil-menu-item';
+    const selecionar=document.createElement('button');
+    selecionar.type='button';
+    selecionar.className='perfil-menu-select';
+    selecionar.title='Preencher com este cadastro';
+    const nome=document.createElement('strong');
+    nome.textContent=p.nome;
+    selecionar.appendChild(nome);
+    if(p.cpf){const cpf=document.createElement('small');cpf.textContent=p.cpf;selecionar.appendChild(cpf);}
+    selecionar.addEventListener('click',()=>selecionarPerfil(tipo,i));
+    const remover=document.createElement('button');
+    remover.type='button';
+    remover.className='perfil-menu-remove';
+    remover.textContent='✕';
+    remover.title='Excluir '+p.nome+' dos cadastros salvos';
+    remover.setAttribute('aria-label',remover.title);
+    remover.addEventListener('click',e=>{e.stopPropagation();excluirPerfil(tipo,i);});
+    item.append(selecionar,remover);
+    menu.appendChild(item);
+  });
+}
+function fecharListasPerfis(){
+  Object.values(perfilConfig).forEach(cfg=>{
+    g(cfg.lista).classList.remove('open');
+    g(cfg.botao).setAttribute('aria-expanded','false');
+  });
+}
+function toggleListaPerfis(tipo,event){
+  if(event) event.stopPropagation();
+  const cfg=perfilConfig[tipo];
+  const aberta=g(cfg.lista).classList.contains('open');
+  fecharListasPerfis();
+  if(aberta) return;
+  renderizarListaPerfis(tipo);
+  g(cfg.lista).classList.add('open');
+  g(cfg.botao).setAttribute('aria-expanded','true');
+}
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.perfil-picker-wrap')) fecharListasPerfis();
+});
 
 // ── Toast notification ──
 function showToast(msg){
@@ -2366,14 +2502,13 @@ function restaurarSimples(){
   atualizarSimples();
 }
 function verificarPerfis(){
-  if(localStorage.getItem('perfil_locador')){
-    g('pinLocador').style.display='';
-    carregarPerfilLocador();
-  }
-  if(localStorage.getItem('perfil_emissor')){
-    g('pinEmissor').style.display='';
-    carregarPerfilEmissor();
-  }
+  ['locador','emissor'].forEach(tipo=>{
+    const lista=lerPerfis(tipo);
+    exibirBotaoPerfis(tipo);
+    // Mantém o preenchimento automático antigo quando houver um único cadastro.
+    // Com vários cadastros, o usuário escolhe qual deseja usar.
+    if(lista.length===1) selecionarPerfil(tipo,0,true);
+  });
 }
 // Save client on PDF generation
 function registrarClientes(tipo){

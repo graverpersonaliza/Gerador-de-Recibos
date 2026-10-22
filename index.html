@@ -1812,14 +1812,14 @@ function atualizarSimples(){
 // ═══════════════════════════════════════
 // PDF
 // ═══════════════════════════════════════
-// Exportação A4: recibo compacto, sem reduzir fontes no PDF.
+// Exportação A4: recibo horizontal/mais quadrado, sem reduzir fontes no PDF.
 // Nitidez: captura sem perdas (PNG a 360 dpi aprox.) em vez de JPEG.
 // Moldura: traço vetorial azul bem visível, em volta de TODO o recibo.
 // O visual do formulário, a prévia, o histórico e os nomes de arquivo não mudam.
 async function exportarReciboPDF(elemento, nomeArquivo){
   const {jsPDF} = window.jspdf;
-  const larguraBase = 600; // pixels CSS da composição estável (independe da tela)
-  const larguraPDF = 150; // mm: recibo compacto, aproximadamente meia folha
+  const larguraBase = 728; // largura horizontal da composição estável (independe da tela)
+  const larguraPDF = 182; // mm: recibo mais horizontal, com 14 mm de margem lateral no A4
   const margemSuperior = 17; // mm
   const margemInferior = 17; // mm
   const folgaMoldura = 2.8; // mm: espaço entre conteúdo e contorno nítido
@@ -1887,7 +1887,7 @@ async function exportarReciboPDF(elemento, nomeArquivo){
     }
 
     // PNG sem perdas evita os artefatos de compactação nas letras e nas linhas.
-    // 600 px CSS -> 2160 px de imagem -> 366 dpi ao imprimir com 150 mm.
+    // 728 px CSS -> 2621 px de imagem -> 366 dpi ao imprimir com 182 mm.
     const escala = Math.min(3.6, 24000 / Math.max(1, conteudo.scrollHeight));
     const canvas = await html2canvas(conteudo, {
       scale: escala, useCORS: true, backgroundColor: '#ffffff', logging: false,

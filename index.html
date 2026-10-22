@@ -1812,16 +1812,17 @@ function atualizarSimples(){
 // ═══════════════════════════════════════
 // PDF
 // ═══════════════════════════════════════
-// Exportação A4: recibo compacto (próximo de meia folha nos casos comuns),
-// com moldura nítida, tipografia legível e continuação sem cortes se necessário.
-// O visual na tela, os dados e o histórico não são modificados.
+// Exportação A4: recibo compacto, sem reduzir fontes no PDF.
+// Nitidez: captura sem perdas (PNG a 360 dpi aprox.) em vez de JPEG.
+// Moldura: traço vetorial azul bem visível, em volta de TODO o recibo.
+// O visual do formulário, a prévia, o histórico e os nomes de arquivo não mudam.
 async function exportarReciboPDF(elemento, nomeArquivo){
   const {jsPDF} = window.jspdf;
-  const larguraBase = 600; // px: composição própria para a exportação, sem depender da tela
-  const larguraPDF = 150; // mm: largura próxima da folha A5, dentro do papel A4
-  const margemSuperior = 17;
-  const margemInferior = 17;
-  const folgaMoldura = 2; // mm: moldura é desenhada em vetor (não perde definição)
+  const larguraBase = 600; // pixels CSS da composição estável (independe da tela)
+  const larguraPDF = 150; // mm: recibo compacto, aproximadamente meia folha
+  const margemSuperior = 17; // mm
+  const margemInferior = 17; // mm
+  const folgaMoldura = 2.8; // mm: espaço entre conteúdo e contorno nítido
 
   const area = document.createElement('div');
   area.style.cssText = 'position:fixed;left:-10000px;top:0;width:'+larguraBase+'px;background:#fff;color:#1a2035;z-index:-1;overflow:visible;box-sizing:border-box';
@@ -1833,7 +1834,7 @@ async function exportarReciboPDF(elemento, nomeArquivo){
   conteudo.style.overflow = 'visible';
   conteudo.style.overflowWrap = 'anywhere';
 
-  // Compactação EXCLUSIVA do PDF: mantém conteúdo, textos, fontes e identidade visual.
+  // A compactação acontece somente na cópia usada para exportar.
   const ajustePDF = document.createElement('style');
   ajustePDF.textContent = `
     .receipt-inner { padding: 22px 28px !important; }
@@ -1853,6 +1854,7 @@ async function exportarReciboPDF(elemento, nomeArquivo){
   area.appendChild(ajustePDF);
   area.appendChild(conteudo);
   document.body.appendChild(area);
+
   try {
     if(document.fonts && document.fonts.ready) await document.fonts.ready;
     const imagens = Array.from(area.querySelectorAll('img'));
@@ -1861,15 +1863,14 @@ async function exportarReciboPDF(elemento, nomeArquivo){
       img.onerror = resolve;
     })));
 
-    // Prefere separar páginas entre blocos, evitando cortar assinatura e linhas.
+    // Limites seguros dos blocos e linhas de texto para evitar cortes entre páginas.
     const topoArea = conteudo.getBoundingClientRect().top;
     const limitesBlocos = [];
     const limitesLinhas = [];
-    conteudo.querySelectorAll('.receipt-inner > *, .receipt-section, .receipt-grid > *, .receipt-parcela-row, .receipt-field, .receipt-sig-box, .receipt-footer, .receipt-obs').forEach(el => {
+    conteudo.querySelectorAll('.receipt-section, .receipt-grid > *, .receipt-parcela-row, .receipt-field, .receipt-sig-box, .receipt-footer, .receipt-obs').forEach(el => {
       const r = el.getBoundingClientRect();
       if(r.height > 0) limitesBlocos.push(r.bottom - topoArea + 3);
     });
-    // A seleção acima inclui os elementos internos mesmo no recibo clonado.
     Array.from(conteudo.children).forEach(el => {
       const r = el.getBoundingClientRect();
       if(r.height > 0) limitesBlocos.push(r.bottom - topoArea + 3);
@@ -1885,9 +1886,11 @@ async function exportarReciboPDF(elemento, nomeArquivo){
       }
     }
 
-    // Captura com ~239 dpi efetivos: mais definição que a versão anterior (1,5x).
+    // PNG sem perdas evita os artefatos de compactação nas letras e nas linhas.
+    // 600 px CSS -> 2160 px de imagem -> 366 dpi ao imprimir com 150 mm.
+    const escala = Math.min(3.6, 24000 / Math.max(1, conteudo.scrollHeight));
     const canvas = await html2canvas(conteudo, {
-      scale: 2.4, useCORS: true, backgroundColor: '#ffffff', logging: false,
+      scale: escala, useCORS: true, backgroundColor: '#ffffff', logging: false,
       width: larguraBase, height: Math.ceil(conteudo.scrollHeight),
       windowWidth: Math.max(document.documentElement.clientWidth, larguraBase),
       scrollX: 0, scrollY: 0
@@ -1896,7 +1899,8 @@ async function exportarReciboPDF(elemento, nomeArquivo){
 
     const pdf = new jsPDF({orientation:'portrait',unit:'mm',format:'a4',compress:true});
     const larguraPagina = pdf.internal.pageSize.getWidth();
-    const alturaUtil = pdf.internal.pageSize.getHeight() - margemSuperior - margemInferior - folgaMoldura;
+    const alturaPagina = pdf.internal.pageSize.getHeight();
+    const alturaUtil = alturaPagina - margemSuperior - margemInferior - folgaMoldura;
     const deslocX = (larguraPagina - larguraPDF) / 2;
     const pxPorMm = canvas.width / larguraPDF;
     const pxPorCss = canvas.width / larguraBase;
@@ -1904,10 +1908,10 @@ async function exportarReciboPDF(elemento, nomeArquivo){
     let inicioPx = 0;
     let pagina = 0;
 
-    while(inicioPx < canvas.height) {
+    while(inicioPx < canvas.height){
       const limitePx = Math.min(canvas.height, inicioPx + alturaMaximaPx);
       let fimPx = limitePx;
-      if(limitePx < canvas.height) {
+      if(limitePx < canvas.height){
         const limiteCss = limitePx / pxPorCss;
         const minimoCss = (inicioPx + alturaMaximaPx * 0.60) / pxPorCss;
         const escolher = lista => lista.filter(y => y >= minimoCss && y <= limiteCss - 6)
@@ -1921,21 +1925,22 @@ async function exportarReciboPDF(elemento, nomeArquivo){
       const fatia = document.createElement('canvas');
       fatia.width = canvas.width;
       fatia.height = alturaPx;
-      const ctx = fatia.getContext('2d');
+      const ctx = fatia.getContext('2d', {alpha:false});
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, fatia.width, fatia.height);
       ctx.drawImage(canvas, 0, inicioPx, canvas.width, alturaPx, 0, 0, canvas.width, alturaPx);
       if(pagina > 0) pdf.addPage();
 
-      // JPEG de alta qualidade: mantém boa nitidez sem gerar PDFs muito pesados.
-      pdf.addImage(fatia.toDataURL('image/jpeg', 0.90), 'JPEG', deslocX, margemSuperior,
+      // PNG LOSSLESS: sem borrões nem halos de JPEG ao redor das letras.
+      pdf.addImage(fatia.toDataURL('image/png'), 'PNG', deslocX, margemSuperior,
         larguraPDF, alturaMm, undefined, 'FAST');
 
-      // Moldura vetorial com as mesmas tonalidades da borda vista na tela.
-      pdf.setDrawColor(189, 201, 222);
-      pdf.setLineWidth(0.30);
+      // Moldura REAL, em traço vetorial, desenhada depois da imagem (sempre visível).
+      // Mesmo com zoom ou impressão, o contorno não perde definição.
+      pdf.setDrawColor(59, 91, 219); // azul principal do Recibos Pro
+      pdf.setLineWidth(0.55);
       pdf.roundedRect(deslocX - folgaMoldura, margemSuperior - folgaMoldura,
-        larguraPDF + 2 * folgaMoldura, alturaMm + 2 * folgaMoldura, 1.4, 1.4, 'S');
+        larguraPDF + 2*folgaMoldura, alturaMm + 2*folgaMoldura, 1.5, 1.5, 'S');
       inicioPx = fimPx;
       pagina++;
     }

@@ -607,7 +607,7 @@ body.dark #recibo-preview-simples {
   transition: background .1s;
 }
 .ac-item:last-child { border-bottom: none }
-.ac-item:hover { background: var(--accent-light); color: var(--accent) }
+.ac-item:hover, .ac-item:focus-visible { background: var(--accent-light); color: var(--accent); outline-offset: -2px; }
 .ac-item strong { display: block; font-size: 12.5px }
 .ac-item span { font-size: 11px; color: var(--muted) }
 .saved-pin {
@@ -690,7 +690,18 @@ body.dark #recibo-preview-simples {
 ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px }
 
 /* ── SELEÇÃO DE LOCADORES E EMISSORES SALVOS ── */
-.saved-pin { border: 0; font-family: inherit; line-height: 1.6; }
+.saved-pin {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 6px 12px; min-height: 32px;
+  font-family: inherit; font-size: 12px; line-height: 1.2;
+  border: 1px solid var(--border2); border-radius: 8px;
+  letter-spacing: normal; transition: background .15s, color .15s, border-color .15s;
+}
+.saved-pin:hover { border-color: var(--accent); }
+.saved-pin:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* The forms' popovers must not be cut off by the card's rounded corners. */
+.panel-form > .card { overflow: visible; }
+.panel-form > .card > .card-header { border-radius: var(--radius) var(--radius) 0 0; }
 .perfil-picker-wrap { position: relative; display: inline-flex; align-items: center; margin-left: 8px; flex: 0 0 auto; }
 .perfil-menu {
   display: none; position: absolute; top: calc(100% + 8px); left: 0;
@@ -708,6 +719,7 @@ body.dark #recibo-preview-simples {
   gap: 3px; padding: 9px 8px; cursor: pointer; color: var(--text);
   font: inherit; text-align: left; background: transparent; border: none;
 }
+.perfil-menu-select:hover, .perfil-menu-select:focus-visible { background: var(--accent-light); color: var(--accent); border-radius: 6px; outline-offset: -2px; }
 .perfil-menu-select strong { font-size: 12px; font-weight: 600; white-space: normal; overflow-wrap: anywhere; }
 .perfil-menu-select small { font-size: 10.5px; color: var(--muted); }
 .perfil-menu-remove {
@@ -756,7 +768,7 @@ body.dark #recibo-preview-simples {
             <button type="button" class="saved-pin" id="pinLocador" onclick="toggleListaPerfis('locador',event)" style="display:none" aria-expanded="false" aria-controls="listaPerfisLocador">📌 Usar salvo ▾</button>
             <div class="perfil-menu" id="listaPerfisLocador" role="group" aria-label="Locadores salvos"></div>
           </div>
-          <button type="button" class="saved-pin" onclick="salvarPerfilLocador()" style="margin-left:4px">💾 Salvar</button>
+          <button type="button" class="saved-pin" onclick="salvarPerfilLocador()" style="margin-left:8px">💾 Salvar</button>
         </div>
         <div class="row">
           <div class="field ac-wrap">
@@ -997,7 +1009,7 @@ body.dark #recibo-preview-simples {
             <button type="button" class="saved-pin" id="pinEmissor" onclick="toggleListaPerfis('emissor',event)" style="display:none" aria-expanded="false" aria-controls="listaPerfisEmissor">📌 Usar salvo ▾</button>
             <div class="perfil-menu" id="listaPerfisEmissor" role="group" aria-label="Emissores salvos"></div>
           </div>
-          <button type="button" class="saved-pin" onclick="salvarPerfilEmissor()" style="margin-left:4px">💾 Salvar</button>
+          <button type="button" class="saved-pin" onclick="salvarPerfilEmissor()" style="margin-left:8px">💾 Salvar</button>
         </div>
         <div class="row">
           <div class="field">
@@ -1277,9 +1289,9 @@ function configurarCanvas(canvasId, labelId){
 window.addEventListener('load',()=>{
   configurarCanvas('assinaturaCanvas','sigLabel');
   configurarCanvas('assinaturaSimples','sigLabelSimples');
-  verificarPerfis();
   restaurarAluguel();
   restaurarSimples();
+  verificarPerfis();
   // set default mes to current month
   const meses=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
   g('mes').value = meses[new Date().getMonth()];
@@ -2319,7 +2331,7 @@ function lerPerfis(tipo){
 function exibirBotaoPerfis(tipo){
   const cfg=perfilConfig[tipo];
   const btn=g(cfg.botao);
-  btn.style.display=lerPerfis(tipo).length ? '' : 'none';
+  btn.style.display=lerPerfis(tipo).length ? 'inline-flex' : 'none';
 }
 function salvarPerfil(tipo){
   const cfg=perfilConfig[tipo];
@@ -2333,9 +2345,16 @@ function salvarPerfil(tipo){
   );
   if(indice>=0) lista.splice(indice,1);
   lista.unshift(p);
-  localStorage.setItem(cfg.chave,JSON.stringify(lista));
-  // Mantém a última escolha disponível para eventual retorno a uma versão antiga.
-  localStorage.setItem(cfg.antiga,JSON.stringify(p));
+  try {
+    localStorage.setItem(cfg.chave,JSON.stringify(lista));
+    // Mantém compatibilidade com uma instalação antiga.
+    localStorage.setItem(cfg.antiga,JSON.stringify(p));
+  } catch(e) {
+    showToast('Não foi possível salvar no navegador. Verifique o armazenamento.');
+    return;
+  }
+  if(tipo==='locador') persistirAluguel();
+  else persistirSimples();
   exibirBotaoPerfis(tipo);
   renderizarListaPerfis(tipo);
   showToast(indice>=0 ? 'Cadastro atualizado!' : 'Cadastro salvo!');
@@ -2416,7 +2435,14 @@ function toggleListaPerfis(tipo,event){
   fecharListasPerfis();
   if(aberta) return;
   renderizarListaPerfis(tipo);
-  g(cfg.lista).classList.add('open');
+  const menu=g(cfg.lista);
+  menu.classList.add('open');
+  // Move the menu horizontally when near the viewport edge; no clipping on mobile.
+  const wrap=g(cfg.botao).parentElement;
+  const r=wrap.getBoundingClientRect();
+  const w=menu.getBoundingClientRect().width;
+  const limiteDireita=window.innerWidth-12;
+  menu.style.left=Math.min(0,limiteDireita-r.left-w)+'px';
   g(cfg.botao).setAttribute('aria-expanded','true');
 }
 document.addEventListener('click',e=>{
@@ -2451,28 +2477,36 @@ function salvarCliente(nome, cpf){
   localStorage.setItem('graver_clientes', JSON.stringify(lista));
 }
 function acBuscar(input, listId, nomeId, cpfId){
-  const q = input.value.trim().toLowerCase();
-  const list = g(listId);
-  if(!q){ list.classList.remove('open'); return; }
-  const matches = getClientes().filter(c=>c.nome.toLowerCase().includes(q));
-  if(!matches.length){ list.classList.remove('open'); return; }
-  list.innerHTML = matches.slice(0,8).map(c=>`
-    <div class="ac-item" onmousedown="acSelecionar('${nomeId}','${cpfId}','${listId}',${JSON.stringify(c.nome)},${JSON.stringify(c.cpf||'')})">
-      <strong>${c.nome}</strong>
-      ${c.cpf?`<span>${c.cpf}</span>`:''}
-    </div>`).join('');
-  list.classList.add('open');
+  const q=input.value.trim().toLocaleLowerCase('pt-BR');
+  const listaElemento=g(listId);
+  const matches=q ? getClientes().filter(c=>c.nome.toLocaleLowerCase('pt-BR').includes(q)).slice(0,8) : [];
+  listaElemento.replaceChildren();
+  if(!matches.length){listaElemento.classList.remove('open');return;}
+  matches.forEach(c=>{
+    // DOM events rather than HTML event attributes: quotes in names cannot break clicks.
+    const opcao=document.createElement('button');
+    opcao.type='button';
+    opcao.className='ac-item';
+    opcao.style.cssText='display:block;width:100%;text-align:left;border:0;font-family:inherit';
+    const nome=document.createElement('strong');nome.textContent=c.nome;
+    opcao.appendChild(nome);
+    if(c.cpf){const cpf=document.createElement('span');cpf.textContent=c.cpf;opcao.appendChild(cpf);}
+    opcao.addEventListener('click',()=>acSelecionar(nomeId,cpfId,listId,c.nome,c.cpf||''));
+    listaElemento.appendChild(opcao);
+  });
+  listaElemento.classList.add('open');
 }
 function acSelecionar(nomeId, cpfId, listId, nome, cpf){
-  g(nomeId).value = nome;
-  if(cpf) g(cpfId).value = cpf;
+  g(nomeId).value=nome;
+  g(cpfId).value=cpf||'';
   g(listId).classList.remove('open');
-  atualizar(); atualizarSimples();
+  if(nomeId==='locatario'){atualizar();persistirAluguel();}
+  else {atualizarSimples();persistirSimples();}
 }
-// close autocomplete on outside click
-document.addEventListener('click', e=>{
+// Close suggestion lists only when clicking outside both input and list.
+document.addEventListener('click',e=>{
   document.querySelectorAll('.ac-list').forEach(l=>{
-    if(!l.previousElementSibling?.contains(e.target)) l.classList.remove('open');
+    if(!l.contains(e.target) && !l.previousElementSibling?.contains(e.target)) l.classList.remove('open');
   });
 });
 
@@ -2507,7 +2541,7 @@ function verificarPerfis(){
     exibirBotaoPerfis(tipo);
     // Mantém o preenchimento automático antigo quando houver um único cadastro.
     // Com vários cadastros, o usuário escolhe qual deseja usar.
-    if(lista.length===1) selecionarPerfil(tipo,0,true);
+    if(lista.length===1 && !g(perfilConfig[tipo].nome).value.trim()) selecionarPerfil(tipo,0,true);
   });
 }
 // Save client on PDF generation

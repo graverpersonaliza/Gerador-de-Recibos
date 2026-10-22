@@ -781,7 +781,13 @@ body.dark #recibo-preview-simples {
           </div>
         </div>
 
-        <div class="section-label">Locatário</div>
+        <div class="section-label">Locatário
+          <div class="perfil-picker-wrap">
+            <button type="button" class="saved-pin" id="pinLocatario" onclick="toggleListaLocatarios(event)" style="display:none" aria-expanded="false" aria-controls="listaLocatariosSalvos">📌 Usar salvo ▾</button>
+            <div class="perfil-menu" id="listaLocatariosSalvos" role="group" aria-label="Locatários salvos"></div>
+          </div>
+          <button type="button" class="saved-pin" onclick="salvarLocatarioSalvo()" style="margin-left:8px">💾 Salvar</button>
+        </div>
         <div class="row">
           <div class="field ac-wrap">
             <label>Nome completo</label>
@@ -2433,6 +2439,7 @@ function toggleListaPerfis(tipo,event){
   const cfg=perfilConfig[tipo];
   const aberta=g(cfg.lista).classList.contains('open');
   fecharListasPerfis();
+  fecharListaLocatarios();
   if(aberta) return;
   renderizarListaPerfis(tipo);
   const menu=g(cfg.lista);
@@ -2446,8 +2453,141 @@ function toggleListaPerfis(tipo,event){
   g(cfg.botao).setAttribute('aria-expanded','true');
 }
 document.addEventListener('click',e=>{
-  if(!e.target.closest('.perfil-picker-wrap')) fecharListasPerfis();
+  if(!e.target.closest('.perfil-picker-wrap')) { fecharListasPerfis(); fecharListaLocatarios(); }
 });
+
+
+// ── Locatários salvos, independentes do locador ──
+// Um locador pode ter inúmeros locatários. Cada cadastro guarda o imóvel
+// e o aluguel, mas NÃO guarda competência, data do pagamento ou assinatura.
+const chaveLocatariosSalvos='perfis_locatarios';
+const camposImovelSalvo=['cep','logradouro','numero','bairro','cidade','uf','tipoImovel','complemento','valor'];
+function lerLocatariosSalvos(){
+  try {
+    const dados=JSON.parse(localStorage.getItem(chaveLocatariosSalvos)||'[]');
+    return Array.isArray(dados) ? dados.filter(x=>x&&typeof x.nome==='string'&&x.nome.trim()) : [];
+  } catch(e){ return []; }
+}
+function chavePessoa(nome,cpf){
+  const documento=String(cpf||'').replace(/\D/g,'');
+  const nomeNormalizado=String(nome||'').trim().toLocaleLowerCase('pt-BR');
+  return {documento,nome:nomeNormalizado};
+}
+function mesmaPessoa(a,b){
+  const p=chavePessoa(a.nome,a.cpf),q=chavePessoa(b.nome,b.cpf);
+  if(p.documento&&q.documento) return p.documento===q.documento;
+  return !!(p.nome&&q.nome&&p.nome===q.nome);
+}
+function locadorAtual(){
+  return {nome:g('locador').value.trim(),cpf:g('cpfLocador').value.trim()};
+}
+function locatariosDoLocador(){
+  const atual=locadorAtual();
+  const todos=lerLocatariosSalvos();
+  // Sem locador selecionado, permite consultar a relação completa.
+  if(!atual.nome&&!atual.cpf) return todos;
+  return todos.filter(p=>!p.locador?.nome&&!p.locador?.cpf || mesmaPessoa(p.locador,atual));
+}
+function exibirBotaoLocatarios(){
+  g('pinLocatario').style.display=lerLocatariosSalvos().length?'inline-flex':'none';
+}
+function salvarLocatarioSalvo(){
+  const nome=g('locatario').value.trim(),cpf=g('cpfLocatario').value.trim();
+  if(!nome){showToast('Informe o nome do locatário antes de salvar.');g('locatario').focus();return;}
+  const imovel={};
+  camposImovelSalvo.forEach(id=>{imovel[id]=g(id).value;});
+  const cadastro={nome,cpf,locador:locadorAtual(),imovel};
+  const lista=lerLocatariosSalvos();
+  const indice=lista.findIndex(p=>mesmaPessoa(p,cadastro)&&
+    ((!p.locador?.nome&&!p.locador?.cpf&&!cadastro.locador.nome&&!cadastro.locador.cpf) ||
+     mesmaPessoa(p.locador||{},cadastro.locador)));
+  if(indice>=0)lista.splice(indice,1);
+  lista.unshift(cadastro);
+  try {localStorage.setItem(chaveLocatariosSalvos,JSON.stringify(lista));}
+  catch(e){showToast('Não foi possível salvar. Verifique o espaço do navegador.');return;}
+  // Continua alimentando o autocompletar já existente.
+  try {salvarCliente(nome,cpf);} catch(e){}
+  persistirAluguel();
+  exibirBotaoLocatarios();
+  renderizarListaLocatarios();
+  showToast(indice>=0?'Dados do locatário atualizados!':'Locatário e imóvel salvos!');
+}
+function selecionarLocatarioSalvo(cadastro){
+  if(!cadastro)return;
+  g('locatario').value=cadastro.nome;
+  g('cpfLocatario').value=cadastro.cpf||'';
+  // Mantém rigorosamente os dados do locador que já está selecionado.
+  camposImovelSalvo.forEach(id=>{
+    if(cadastro.imovel&&Object.prototype.hasOwnProperty.call(cadastro.imovel,id))
+      g(id).value=cadastro.imovel[id];
+  });
+  atualizar();
+  persistirAluguel();
+  fecharListaLocatarios();
+  showToast('Locatário selecionado: '+cadastro.nome);
+}
+function excluirLocatarioSalvo(cadastro){
+  if(!confirm('Excluir o cadastro salvo de '+cadastro.nome+'?'))return;
+  const lista=lerLocatariosSalvos();
+  const indice=lista.findIndex(p=>mesmaPessoa(p,cadastro)&&
+    ((!p.locador?.nome&&!p.locador?.cpf&&!cadastro.locador?.nome&&!cadastro.locador?.cpf) ||
+     mesmaPessoa(p.locador||{},cadastro.locador||{})));
+  if(indice<0)return;
+  lista.splice(indice,1);
+  localStorage.setItem(chaveLocatariosSalvos,JSON.stringify(lista));
+  exibirBotaoLocatarios();
+  renderizarListaLocatarios();
+  if(!lista.length)fecharListaLocatarios();
+  showToast('Cadastro do locatário excluído.');
+}
+function renderizarListaLocatarios(){
+  const menu=g('listaLocatariosSalvos');
+  menu.replaceChildren();
+  const lista=locatariosDoLocador();
+  const titulo=document.createElement('div');
+  titulo.className='perfil-menu-title';
+  titulo.textContent=lista.length===1?'1 locatário disponível':lista.length+' locatários disponíveis';
+  menu.appendChild(titulo);
+  if(!lista.length){
+    const aviso=document.createElement('div');
+    aviso.className='perfil-menu-title';
+    aviso.textContent='Nenhum locatário salvo para este locador.';
+    menu.appendChild(aviso);
+  }
+  lista.forEach(cadastro=>{
+    const item=document.createElement('div');item.className='perfil-menu-item';
+    const selecionar=document.createElement('button');
+    selecionar.type='button';selecionar.className='perfil-menu-select';
+    selecionar.title='Preencher locatário e dados do imóvel';
+    const nome=document.createElement('strong');nome.textContent=cadastro.nome;
+    selecionar.appendChild(nome);
+    const descricao=[cadastro.cpf||'', [cadastro.imovel?.logradouro,cadastro.imovel?.numero].filter(Boolean).join(', ')].filter(Boolean).join(' · ');
+    if(descricao){const detalhe=document.createElement('small');detalhe.textContent=descricao;selecionar.appendChild(detalhe);}
+    selecionar.addEventListener('click',()=>selecionarLocatarioSalvo(cadastro));
+    const remover=document.createElement('button');remover.type='button';
+    remover.className='perfil-menu-remove';remover.textContent='✕';
+    remover.title='Excluir '+cadastro.nome;remover.setAttribute('aria-label',remover.title);
+    remover.addEventListener('click',e=>{e.stopPropagation();excluirLocatarioSalvo(cadastro);});
+    item.append(selecionar,remover);menu.appendChild(item);
+  });
+}
+function fecharListaLocatarios(){
+  g('listaLocatariosSalvos').classList.remove('open');
+  g('pinLocatario').setAttribute('aria-expanded','false');
+}
+function toggleListaLocatarios(event){
+  if(event)event.stopPropagation();
+  const menu=g('listaLocatariosSalvos');
+  const aberta=menu.classList.contains('open');
+  fecharListaLocatarios();fecharListasPerfis();
+  if(aberta)return;
+  renderizarListaLocatarios();
+  menu.classList.add('open');
+  const wrap=g('pinLocatario').parentElement;
+  const r=wrap.getBoundingClientRect();
+  menu.style.left=Math.min(0,window.innerWidth-12-r.left-menu.getBoundingClientRect().width)+'px';
+  g('pinLocatario').setAttribute('aria-expanded','true');
+}
 
 // ── Toast notification ──
 function showToast(msg){
@@ -2513,7 +2653,7 @@ document.addEventListener('click',e=>{
 // ── Persistência do formulário ──
 function persistirAluguel(){
   const campos = ['locador','cpfLocador','locatario','cpfLocatario','cep','logradouro',
-    'numero','complemento','bairro','cidade','uf','valor','obs','mes','ano',
+    'numero','complemento','bairro','cidade','uf','tipoImovel','valor','obs','mes','ano',
     'forma','dataPagamento','diaVencimento','multaPerc','jurosPerc','indiceReajuste'];
   const data = {};
   campos.forEach(id=>{ const el=g(id); if(el) data[id]=el.value; });
@@ -2536,6 +2676,7 @@ function restaurarSimples(){
   atualizarSimples();
 }
 function verificarPerfis(){
+  exibirBotaoLocatarios();
   ['locador','emissor'].forEach(tipo=>{
     const lista=lerPerfis(tipo);
     exibirBotaoPerfis(tipo);
